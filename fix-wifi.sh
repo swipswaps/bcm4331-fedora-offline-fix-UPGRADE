@@ -181,10 +181,11 @@ perform_recovery() {
 
     # 6. Driver Strategy (from manifest if exists)
     if [[ -f "$MANIFEST_DB" ]]; then
-        K_VER="$(uname -r | cut -d. -f1,2)"
-        DB_ENTRY=$(grep -E "^14e4:4331" "$MANIFEST_DB" | head -n1 || echo "")
+        # Look for the specific PCI ID in the manifest
+        DB_ENTRY=$(grep -i "14e4:4331" "$MANIFEST_DB" | head -n1 || echo "")
         if [[ -n "$DB_ENTRY" ]]; then
-            STRATEGY=$(echo "$DB_ENTRY" | cut -d: -f3)
+            # Format: PCI_ID:NAME:DRIVER
+            STRATEGY=$(echo "$DB_ENTRY" | awk -F: '{print $3}')
             echo "→ Applying strategy: $STRATEGY"
             if ! lsmod | grep -q "$STRATEGY"; then
                 modprobe "$STRATEGY" allhwsupport=1 || true
