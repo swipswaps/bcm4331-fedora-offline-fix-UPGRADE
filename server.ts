@@ -5,7 +5,20 @@ import { promisify } from "util";
 import fs from "fs";
 import path from "path";
 
-const execAsync = promisify(exec);
+const execAsync = (cmd: string, timeout = 3000) => {
+  return new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
+    exec(cmd, { timeout }, (error, stdout, stderr) => {
+      if (error) {
+        // If it's just a non-zero exit code, we might still want the output
+        // but for our purposes, we'll treat it as an error and let the caller handle it
+        reject(error);
+      } else {
+        resolve({ stdout, stderr });
+      }
+    });
+  });
+};
+
 const app = express();
 const PORT = 3000;
 const WORKSPACE_DIR = process.cwd();
@@ -23,18 +36,19 @@ let isFixing = false;
 
 // API: Get Unified System Status
 app.get("/api/status", async (req, res) => {
+  console.log(`[${new Date().toISOString()}] GET /api/status`);
   try {
     const recoveryEnabled = !fs.existsSync(DISABLE_FLAG);
     const bundleReady = fs.existsSync(BUNDLE_DIR) && fs.readdirSync(BUNDLE_DIR).some(f => f.endsWith(".fw"));
     
-    // Parallelize system calls for efficiency
+    // Parallelize system calls with individual timeouts and error handling
     const [connectivity, kernel, powerSave] = await Promise.all([
       execAsync("nmcli networking connectivity").then(r => r.stdout.trim()).catch(() => "unknown"),
       execAsync("uname -r").then(r => r.stdout.trim()).catch(() => "unknown"),
       execAsync("iw dev $(ls /sys/class/net | grep -E '^wl' | head -n1) get power_save 2>/dev/null").then(r => r.stdout.trim()).catch(() => "unknown")
     ]);
 
-    res.json({
+    const responseData = {
       recoveryEnabled,
       isHealthy: connectivity === "full" || connectivity === "limited",
       bundleReady,
@@ -42,8 +56,11 @@ app.get("/api/status", async (req, res) => {
       powerSave,
       isFixing,
       timestamp: new Date().toISOString()
-    });
+    };
+    
+    res.json(responseData);
   } catch (error) {
+    console.error("Error in /api/status:", error);
     res.status(500).json({ error: String(error) });
   }
 });
@@ -95,14 +112,16 @@ app.post("/api/fix", (req, res) => {
 
 // API: Get Logs
 app.get("/api/logs", async (req, res) => {
+  console.log(`[${new Date().toISOString()}] GET /api/logs`);
   try {
     if (!fs.existsSync(LOG_FILE)) {
       return res.json({ logs: "No logs found yet." });
     }
-    // Efficiently get last 100 lines
-    const { stdout } = await execAsync(`tail -n 100 ${LOG_FILE}`);
+    // Efficiently get last 100 lines with timeout
+    const { stdout } = await execAsync(`tail -n 100 ${LOG_FILE}`, 2000);
     res.json({ logs: stdout });
   } catch (error) {
+    console.error("Error in /api/logs:", error);
     res.status(500).json({ error: String(error) });
   }
 });

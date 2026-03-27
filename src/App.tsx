@@ -42,7 +42,11 @@ export default function App() {
 
   const fetchStatus = useCallback(async () => {
     try {
-      const res = await fetch("/api/status");
+      const res = await fetch(`/api/status?t=${Date.now()}`);
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`HTTP ${res.status}: ${text.slice(0, 100)}`);
+      }
       const data = await res.json();
       setStatus(data);
     } catch (e) {
@@ -52,7 +56,11 @@ export default function App() {
 
   const fetchLogs = useCallback(async () => {
     try {
-      const res = await fetch("/api/logs");
+      const res = await fetch(`/api/logs?t=${Date.now()}`);
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`HTTP ${res.status}: ${text.slice(0, 100)}`);
+      }
       const data = await res.json();
       setLogs(data.logs);
     } catch (e) {
