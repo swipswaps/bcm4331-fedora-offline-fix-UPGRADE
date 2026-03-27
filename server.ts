@@ -71,6 +71,16 @@ app.post("/api/toggle-recovery", (req, res) => {
   }
 });
 
+// API: Toggle Power Save
+app.post("/api/toggle-power-save", (req, res) => {
+  const { enabled } = req.body;
+  const flag = enabled ? "--power-save-on" : "--power-save-off";
+  exec(`sudo ${FIX_SCRIPT} ${flag}`, (error, stdout, stderr) => {
+    console.log("Power save toggle completed", { error, stdout, stderr });
+  });
+  res.json({ success: true, powerSave: enabled ? "on" : "off" });
+});
+
 // API: Manual Fix
 app.post("/api/fix", (req, res) => {
   if (isFixing) return res.status(429).json({ error: "Fix already in progress" });

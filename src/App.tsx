@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { 
   Wifi, 
   WifiOff, 
@@ -10,7 +10,12 @@ import {
   Settings,
   Activity,
   Zap,
-  ZapOff
+  ZapOff,
+  ChevronRight,
+  ChevronDown,
+  Circle,
+  LayoutGrid,
+  Maximize2
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -30,6 +35,10 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [preparingBundle, setPreparingBundle] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [isCompact, setIsCompact] = useState(true);
+  const [showLogs, setShowLogs] = useState(false);
+  
+  const logEndRef = useRef<HTMLDivElement>(null);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -66,11 +75,26 @@ export default function App() {
     }
   };
 
+  const togglePowerSave = async () => {
+    if (!status) return;
+    setLoading(true);
+    try {
+      const isCurrentlyOn = status.powerSave.includes("on");
+      const res = await fetch("/api/toggle-power-save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: !isCurrentlyOn })
+      });
+      if (res.ok) await fetchStatus();
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const triggerFix = async () => {
     setLoading(true);
     try {
       await fetch("/api/fix", { method: "POST" });
-      // Adaptive feedback
       setTimeout(() => {
         fetchStatus();
         fetchLogs();
@@ -95,245 +119,235 @@ export default function App() {
     }
   };
 
-  // Initial Load
   useEffect(() => {
     fetchStatus();
     fetchLogs();
   }, [fetchStatus, fetchLogs]);
 
-  // Adaptive Polling
   useEffect(() => {
     if (!autoRefresh) return;
-    
-    // Faster polling during recovery or degradation
     const intervalTime = (status?.isFixing || !status?.isHealthy) ? 2000 : 8000;
-    
     const interval = setInterval(() => {
       fetchStatus();
       fetchLogs();
     }, intervalTime);
-    
     return () => clearInterval(interval);
   }, [autoRefresh, status?.isHealthy, status?.isFixing, fetchStatus, fetchLogs]);
 
-  return (
-    <div className="min-h-screen bg-[#0A0A0A] text-[#E0E0E0] font-sans selection:bg-blue-500/30">
-      {/* Header / Rail */}
-      <header className="border-b border-white/10 bg-black/50 backdrop-blur-md sticky top-0 z-50">
-        <div className="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between">
+  useEffect(() => {
+    if (showLogs) {
+      logEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [logs, showLogs]);
+
+  const CompactView = () => (
+    <div className="w-[320px] bg-[#151619] rounded-xl overflow-hidden shadow-2xl border border-white/10">
+      {/* Header */}
+      <div className="p-4 bg-black/40 border-b border-white/5 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className={`w-2 h-2 rounded-full ${status?.isHealthy ? 'bg-emerald-500' : 'bg-amber-500'} animate-pulse`} />
+          <span className="text-[10px] font-mono uppercase tracking-widest opacity-60">Broadcom Kit</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setIsCompact(false)} className="p-1 hover:bg-white/5 rounded transition-colors">
+            <Maximize2 className="w-3 h-3 opacity-40" />
+          </button>
+        </div>
+      </div>
+
+      {/* Status Summary */}
+      <div className="p-4 space-y-4">
+        <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
-              <Wifi className="w-5 h-5 text-white" />
+            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${status?.isHealthy ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-400'}`}>
+              {status?.isHealthy ? <Wifi className="w-5 h-5" /> : <WifiOff className="w-5 h-5" />}
             </div>
             <div>
-              <h1 className="text-sm font-semibold tracking-tight uppercase opacity-90">Broadcom Control Center</h1>
-              <p className="text-[10px] font-mono opacity-40 uppercase tracking-widest">v38.2.0-verified</p>
+              <h3 className="text-xs font-medium">{status?.isHealthy ? 'Network Healthy' : 'Network Degraded'}</h3>
+              <p className="text-[9px] font-mono opacity-40 uppercase">{status?.kernel || 'Detecting...'}</p>
             </div>
           </div>
-          
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10">
-              <div className={`w-1.5 h-1.5 rounded-full ${autoRefresh ? 'bg-emerald-500 animate-pulse' : 'bg-white/20'}`} />
-              <span className="text-[9px] font-mono opacity-50 uppercase tracking-wider">
-                {status?.isFixing ? 'RECOVERY IN PROGRESS' : autoRefresh ? 'LIVE MONITORING' : 'PAUSED'}
-              </span>
+          <button 
+            onClick={triggerFix}
+            disabled={loading || status?.isFixing}
+            className="p-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition-all active:scale-95"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading || status?.isFixing ? 'animate-spin' : 'opacity-60'}`} />
+          </button>
+        </div>
+
+        {/* Toggles */}
+        <div className="space-y-1">
+          <div className="flex items-center justify-between p-2 rounded-lg hover:bg-white/[0.02] transition-colors">
+            <div className="flex items-center gap-2">
+              <Power className={`w-3 h-3 ${status?.recoveryEnabled ? 'text-blue-400' : 'opacity-30'}`} />
+              <span className="text-[11px] opacity-70">Autonomous Recovery</span>
             </div>
-            <button 
-              onClick={() => setAutoRefresh(!autoRefresh)}
-              className="p-2 rounded-lg hover:bg-white/5 transition-colors"
-              title={autoRefresh ? "Pause Monitoring" : "Resume Monitoring"}
-            >
-              <RefreshCw className={`w-4 h-4 opacity-40 ${autoRefresh ? 'animate-spin-slow' : ''}`} />
+            <button onClick={toggleRecovery} className={`w-8 h-4 rounded-full relative transition-colors ${status?.recoveryEnabled ? 'bg-blue-600' : 'bg-white/10'}`}>
+              <motion.div animate={{ x: status?.recoveryEnabled ? 18 : 2 }} className="absolute top-0.5 w-3 h-3 bg-white rounded-full" />
             </button>
-            <div className="h-4 w-[1px] bg-white/10" />
-            <Settings className="w-4 h-4 opacity-30 hover:opacity-100 cursor-pointer transition-opacity" />
+          </div>
+
+          <div className="flex items-center justify-between p-2 rounded-lg hover:bg-white/[0.02] transition-colors">
+            <div className="flex items-center gap-2">
+              <Zap className={`w-3 h-3 ${!status?.powerSave?.includes("on") ? 'text-emerald-400' : 'opacity-30'}`} />
+              <span className="text-[11px] opacity-70">Performance Mode</span>
+            </div>
+            <button onClick={togglePowerSave} className={`w-8 h-4 rounded-full relative transition-colors ${!status?.powerSave?.includes("on") ? 'bg-emerald-600' : 'bg-white/10'}`}>
+              <motion.div animate={{ x: !status?.powerSave?.includes("on") ? 18 : 2 }} className="absolute top-0.5 w-3 h-3 bg-white rounded-full" />
+            </button>
+          </div>
+
+          <div className="flex items-center justify-between p-2 rounded-lg hover:bg-white/[0.02] transition-colors">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className={`w-3 h-3 ${status?.bundleReady ? 'text-emerald-400' : 'text-amber-400'}`} />
+              <span className="text-[11px] opacity-70">Offline Bundle</span>
+            </div>
+            {!status?.bundleReady ? (
+              <button onClick={prepareBundle} disabled={preparingBundle} className="text-[9px] font-mono text-blue-400 hover:underline">
+                {preparingBundle ? 'PREPARING...' : 'PREPARE'}
+              </button>
+            ) : (
+              <Circle className="w-2 h-2 fill-emerald-500 text-emerald-500" />
+            )}
           </div>
         </div>
-      </header>
 
-      <main className="max-w-5xl mx-auto px-6 py-8 grid grid-cols-1 lg:grid-cols-12 gap-8">
-        
-        {/* Left Column: Status & Controls */}
-        <div className="lg:col-span-5 space-y-6">
-          
-          {/* Main Status Card */}
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="p-6 rounded-2xl bg-gradient-to-br from-white/[0.03] to-transparent border border-white/10 shadow-2xl"
+        {/* Mini Log Toggle */}
+        <div className="pt-2 border-t border-white/5">
+          <button 
+            onClick={() => setShowLogs(!showLogs)}
+            className="w-full flex items-center justify-between text-[10px] font-mono opacity-40 hover:opacity-100 transition-opacity"
           >
-            <div className="flex items-start justify-between mb-8">
+            <span>HANDSHAKE TELEMETRY</span>
+            {showLogs ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+          </button>
+          
+          <AnimatePresence>
+            {showLogs && (
+              <motion.div 
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 120, opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                className="mt-2 bg-black/40 rounded border border-white/5 overflow-y-auto p-2 font-mono text-[9px] text-blue-200/50"
+              >
+                <pre className="whitespace-pre-wrap">{logs || 'Waiting for events...'}</pre>
+                <div ref={logEndRef} />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div className="px-4 py-2 bg-black/20 border-t border-white/5 flex justify-between items-center">
+        <span className="text-[8px] font-mono opacity-20 uppercase tracking-tighter">Broadcom Specialist Tool v38.2</span>
+        <div className="flex gap-1">
+          <div className="w-1 h-1 rounded-full bg-white/10" />
+          <div className="w-1 h-1 rounded-full bg-white/10" />
+          <div className="w-1 h-1 rounded-full bg-white/10" />
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-[#0A0A0A] text-[#E0E0E0] font-sans selection:bg-blue-500/30 flex items-center justify-center p-4">
+      {isCompact ? (
+        <CompactView />
+      ) : (
+        <div className="max-w-5xl w-full space-y-8">
+          {/* Header */}
+          <header className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-blue-600 flex items-center justify-center shadow-2xl shadow-blue-500/20">
+                <Wifi className="w-7 h-7 text-white" />
+              </div>
               <div>
-                <span className="text-[10px] font-mono opacity-40 uppercase tracking-widest block mb-1">System Health</span>
-                <div className="flex items-center gap-2">
-                  {status?.isHealthy ? (
-                    <div className="flex items-center gap-2 text-emerald-400">
-                      <ShieldCheck className="w-5 h-5" />
-                      <span className="text-xl font-medium tracking-tight">Healthy</span>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2 text-amber-400">
-                      <ShieldAlert className="w-5 h-5" />
-                      <span className="text-xl font-medium tracking-tight">Degraded</span>
-                    </div>
-                  )}
-                </div>
+                <h1 className="text-2xl font-semibold tracking-tight">Broadcom Control Center</h1>
+                <p className="text-xs font-mono opacity-40 uppercase tracking-[0.2em]">Hardware Recovery Suite v38.2</p>
               </div>
-              <Activity className={`w-5 h-5 ${status?.isHealthy ? 'text-emerald-500/50' : 'text-amber-500/50'} ${!status?.isHealthy ? 'animate-pulse' : ''}`} />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5">
-                <span className="text-[9px] font-mono opacity-30 uppercase block mb-2 text-center">Power Save</span>
-                <div className="flex items-center justify-center gap-2">
-                  {status?.powerSave?.includes("on") ? (
-                    <Zap className="w-3 h-3 text-amber-400" />
-                  ) : (
-                    <ZapOff className="w-3 h-3 text-emerald-400" />
-                  )}
-                  <span className="font-mono text-[10px] uppercase opacity-80">
-                    {status?.powerSave || "Unknown"}
-                  </span>
-                </div>
-              </div>
-              <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5">
-                <span className="text-[9px] font-mono opacity-30 uppercase block mb-2 text-center">Kernel</span>
-                <div className="text-center font-mono text-[10px] opacity-80 truncate" title={status?.kernel}>
-                  {status?.kernel || "Detecting..."}
-                </div>
-              </div>
-            </div>
-          </motion.div>
-
-          {/* Autonomous Recovery Toggle */}
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="p-6 rounded-2xl bg-white/[0.02] border border-white/10"
-          >
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${status?.recoveryEnabled ? 'bg-blue-500/20 text-blue-400' : 'bg-white/5 text-white/20'}`}>
-                  <Power className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-medium">Autonomous Recovery</h3>
-                  <p className="text-[11px] opacity-40">Self-heal network on failure</p>
-                </div>
-              </div>
-              <button 
-                onClick={toggleRecovery}
-                disabled={loading}
-                className={`relative w-12 h-6 rounded-full transition-colors ${status?.recoveryEnabled ? 'bg-blue-600' : 'bg-white/10'}`}
-              >
-                <motion.div 
-                  animate={{ x: status?.recoveryEnabled ? 26 : 4 }}
-                  className="absolute top-1 w-4 h-4 bg-white rounded-full shadow-lg"
-                />
-              </button>
-            </div>
-            
-            {!status?.recoveryEnabled && (
-              <div className="mt-4 p-3 rounded-lg bg-amber-500/5 border border-amber-500/20 text-[11px] text-amber-200/60 leading-relaxed">
-                Warning: Automatic repairs are disabled. The system will not attempt to fix Wi-Fi drops without manual intervention.
-              </div>
-            )}
-          </motion.div>
-
-          {/* Offline Bundle Status */}
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.15 }}
-            className="p-6 rounded-2xl bg-white/[0.02] border border-white/10"
-          >
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${status?.bundleReady ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/10 text-amber-400'}`}>
-                  <ShieldCheck className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-medium">Offline Bundle</h3>
-                  <p className="text-[11px] opacity-40">{status?.bundleReady ? 'Firmware cached locally' : 'No local firmware cache'}</p>
-                </div>
-              </div>
-              <button 
-                onClick={prepareBundle}
-                disabled={preparingBundle}
-                className={`text-[10px] font-mono px-3 py-1.5 rounded border transition-all ${preparingBundle ? 'border-white/10 text-white/20' : 'border-blue-500/50 text-blue-400 hover:bg-blue-500/10'}`}
-              >
-                {preparingBundle ? 'PREPARING...' : 'PREPARE NOW'}
-              </button>
-            </div>
-            {!status?.bundleReady && !preparingBundle && (
-              <div className="mt-4 p-3 rounded-lg bg-blue-500/5 border border-blue-500/20 text-[11px] text-blue-200/60 leading-relaxed">
-                Tip: Prepare the offline bundle while you have internet. This ensures recovery works even without a connection.
-              </div>
-            )}
-          </motion.div>
-
-          {/* Manual Action */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="space-y-2"
-          >
-            <button
-              onClick={triggerFix}
-              disabled={loading || status?.isFixing}
-              className="w-full p-4 rounded-2xl bg-white text-black font-medium text-sm flex items-center justify-center gap-2 hover:bg-white/90 active:scale-[0.98] transition-all disabled:opacity-50"
-            >
-              {loading || status?.isFixing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Wifi className="w-4 h-4" />}
-              {status?.isFixing ? 'Recovery in Progress...' : 'Trigger Forced Recovery'}
-            </button>
-            <p className="text-[10px] text-center opacity-30 font-mono uppercase tracking-tighter">
-              Bypasses user-intent flag to re-initialize b43 stack
-            </p>
-          </motion.div>
-
-        </div>
-
-        {/* Right Column: Logs */}
-        <div className="lg:col-span-7 flex flex-col h-[calc(100vh-10rem)]">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2 opacity-50">
-              <Terminal className="w-4 h-4" />
-              <span className="text-[10px] font-mono uppercase tracking-widest">Verbatim Handshake Log</span>
             </div>
             <button 
-              onClick={fetchLogs}
-              className="text-[10px] font-mono opacity-30 hover:opacity-100 transition-opacity"
+              onClick={() => setIsCompact(true)}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all"
             >
-              REFRESH LOGS
+              <LayoutGrid className="w-4 h-4 opacity-60" />
+              <span className="text-xs font-medium">Compact Mode</span>
             </button>
-          </div>
-          
-          <div className="flex-1 rounded-2xl bg-black border border-white/10 overflow-hidden flex flex-col shadow-inner">
-            <div className="flex-1 overflow-y-auto p-4 font-mono text-[11px] leading-relaxed text-blue-200/70 scrollbar-thin scrollbar-thumb-white/10">
-              <AnimatePresence mode="wait">
-                <motion.pre 
-                  key={logs}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="whitespace-pre-wrap"
-                >
-                  {logs || "Waiting for system events..."}
-                </motion.pre>
-              </AnimatePresence>
+          </header>
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            {/* Left: Toggles & Stats */}
+            <div className="lg:col-span-5 space-y-6">
+               {/* Reusing existing cards but with refined styling */}
+               <div className="p-8 rounded-3xl bg-white/[0.02] border border-white/10 space-y-8">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="text-[10px] font-mono opacity-30 uppercase tracking-widest mb-2">Hardware Status</p>
+                      <div className="flex items-center gap-3">
+                        <div className={`w-3 h-3 rounded-full ${status?.isHealthy ? 'bg-emerald-500' : 'bg-amber-500'} animate-pulse`} />
+                        <span className="text-2xl font-medium">{status?.isHealthy ? 'Operational' : 'Degraded'}</span>
+                      </div>
+                    </div>
+                    <Activity className="w-6 h-6 opacity-20" />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="p-4 rounded-2xl bg-black/40 border border-white/5">
+                      <p className="text-[9px] font-mono opacity-30 uppercase mb-2">Power Save</p>
+                      <button onClick={togglePowerSave} className="flex items-center gap-2 group">
+                        {status?.powerSave?.includes("on") ? <Zap className="w-4 h-4 text-amber-400" /> : <ZapOff className="w-4 h-4 text-emerald-400" />}
+                        <span className="text-sm font-mono group-hover:underline">{status?.powerSave?.toUpperCase() || 'UNKNOWN'}</span>
+                      </button>
+                    </div>
+                    <div className="p-4 rounded-2xl bg-black/40 border border-white/5">
+                      <p className="text-[9px] font-mono opacity-30 uppercase mb-2">Kernel</p>
+                      <p className="text-sm font-mono truncate">{status?.kernel || '...'}</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <button onClick={toggleRecovery} className="w-full flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all">
+                      <div className="flex items-center gap-3">
+                        <Power className={`w-5 h-5 ${status?.recoveryEnabled ? 'text-blue-400' : 'opacity-20'}`} />
+                        <span className="text-sm font-medium">Autonomous Recovery</span>
+                      </div>
+                      <div className={`w-10 h-5 rounded-full relative transition-colors ${status?.recoveryEnabled ? 'bg-blue-600' : 'bg-white/10'}`}>
+                        <motion.div animate={{ x: status?.recoveryEnabled ? 22 : 2 }} className="absolute top-1 w-3 h-3 bg-white rounded-full" />
+                      </div>
+                    </button>
+
+                    <button onClick={triggerFix} disabled={loading || status?.isFixing} className="w-full p-6 rounded-2xl bg-white text-black font-semibold flex items-center justify-center gap-3 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50 shadow-xl shadow-white/5">
+                      {loading || status?.isFixing ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Wifi className="w-5 h-5" />}
+                      {status?.isFixing ? 'RECOVERY IN PROGRESS' : 'TRIGGER FORCED RECOVERY'}
+                    </button>
+                  </div>
+               </div>
             </div>
-            <div className="p-3 border-t border-white/5 bg-white/[0.02] flex items-center justify-between">
-              <div className="flex gap-2">
-                <div className={`w-2 h-2 rounded-full ${autoRefresh ? 'bg-emerald-500 animate-pulse' : 'bg-white/20'}`} />
-                <span className="text-[9px] font-mono opacity-30 uppercase">Telemetry {autoRefresh ? 'Active' : 'Paused'}</span>
+
+            {/* Right: Logs */}
+            <div className="lg:col-span-7 flex flex-col h-[600px]">
+              <div className="flex items-center justify-between mb-4 px-2">
+                <div className="flex items-center gap-2 opacity-40">
+                  <Terminal className="w-4 h-4" />
+                  <span className="text-[10px] font-mono uppercase tracking-widest">Verbatim Handshake Log</span>
+                </div>
+                <div className="flex items-center gap-4">
+                  <button onClick={() => setAutoRefresh(!autoRefresh)} className="text-[10px] font-mono opacity-30 hover:opacity-100 transition-opacity">
+                    {autoRefresh ? 'PAUSE MONITORING' : 'RESUME MONITORING'}
+                  </button>
+                  <button onClick={fetchLogs} className="text-[10px] font-mono opacity-30 hover:opacity-100 transition-opacity">REFRESH</button>
+                </div>
               </div>
-              <span className="text-[9px] font-mono opacity-30 uppercase">Last Entry: {new Date().toLocaleTimeString()}</span>
+              <div className="flex-1 rounded-3xl bg-black border border-white/10 p-6 font-mono text-xs text-blue-200/60 overflow-y-auto scrollbar-thin scrollbar-thumb-white/10">
+                <pre className="whitespace-pre-wrap">{logs || 'Initializing telemetry stream...'}</pre>
+                <div ref={logEndRef} />
+              </div>
             </div>
           </div>
         </div>
-
-      </main>
+      )}
     </div>
   );
 }

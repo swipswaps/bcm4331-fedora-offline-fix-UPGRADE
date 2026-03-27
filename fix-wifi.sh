@@ -135,11 +135,21 @@ perform_recovery() {
 
     # 1. Force Networking ON (Fixes "Enable Networking" unchecked)
     echo "→ Enabling networking..."
-    timeout "$CMD_TIMEOUT_SHORT" nmcli networking on 2>/dev/null || true
+    if ! timeout "$CMD_TIMEOUT_SHORT" nmcli networking on 2>/dev/null; then
+        echo "→ WARNING: Failed to enable networking via nmcli. Continuing..."
+        log_milestone "NM_NETWORKING_ON_FAILED"
+    else
+        log_milestone "NM_NETWORKING_ON_SUCCESS"
+    fi
 
     # 2. Unblock RFKill
     echo "→ Unblocking Wi-Fi..."
-    timeout "$CMD_TIMEOUT_SHORT" rfkill unblock wifi 2>/dev/null || true
+    if ! timeout "$CMD_TIMEOUT_SHORT" rfkill unblock wifi 2>/dev/null; then
+        echo "→ WARNING: Failed to unblock Wi-Fi via rfkill. Continuing..."
+        log_milestone "RFKILL_UNBLOCK_FAILED"
+    else
+        log_milestone "RFKILL_UNBLOCK_SUCCESS"
+    fi
 
     # 3. Ensure NetworkManager is running
     if ! systemctl is-active --quiet NetworkManager; then
@@ -211,6 +221,19 @@ perform_recovery() {
 # MAIN
 # -------------------------
 main() {
+    # Argument Parsing
+    if [[ "${1:-}" == "--power-save-on" ]]; then
+        IFACE=$(ls /sys/class/net 2>/dev/null | grep -E '^wl' | head -n1 || echo "")
+        [[ -n "$IFACE" ]] && iw dev "$IFACE" set power_save on 2>/dev/null
+        log_milestone "MANUAL_POWER_SAVE_ON"
+        exit 0
+    elif [[ "${1:-}" == "--power-save-off" ]]; then
+        IFACE=$(ls /sys/class/net 2>/dev/null | grep -E '^wl' | head -n1 || echo "")
+        [[ -n "$IFACE" ]] && iw dev "$IFACE" set power_save off 2>/dev/null
+        log_milestone "MANUAL_POWER_SAVE_OFF"
+        exit 0
+    fi
+
     log_milestone "DIAGNOSTIC_START"
 
     start_trace_stream
