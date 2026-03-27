@@ -1,0 +1,5 @@
+{
+  "name": "Broadcom Wi-Fi Recovery Kit",
+  "description": "Broadcom Control Center: An interactive dashboard for deterministic Wi-Fi recovery, real-time telemetry, and user-controlled autonomous healing.",
+  "requestFramePermissions": []
+}

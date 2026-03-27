@@ -1,0 +1,2 @@
+# PCI_ID:STRATEGY:MIN_KERNEL:MAX_KERNEL:BLOBS_CSV:NOTES
+14e4:4331:b43:6.17:999:ucode29_mimo.fw,ht0initvals29.fw,ht0bsinitvals29.fw:b43 is reliable on 6.17–6.19
