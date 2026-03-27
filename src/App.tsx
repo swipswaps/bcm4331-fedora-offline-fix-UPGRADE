@@ -21,6 +21,7 @@ import { motion, AnimatePresence } from "motion/react";
 
 interface SystemStatus {
   isHealthy: boolean;
+  networkingEnabled: boolean;
   recoveryEnabled: boolean;
   bundleReady: boolean;
   kernel: string;
@@ -165,6 +166,25 @@ export default function App() {
 
       {/* Status Summary */}
       <div className="p-4 space-y-4">
+        {!status?.networkingEnabled && status?.networkingEnabled !== undefined && (
+          <motion.div 
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="p-3 bg-amber-500/20 border border-amber-500/30 rounded-lg flex items-center justify-between gap-3"
+          >
+            <div className="flex items-center gap-2">
+              <ShieldAlert className="w-4 h-4 text-amber-400" />
+              <span className="text-[10px] font-medium text-amber-200 uppercase">Networking Disabled</span>
+            </div>
+            <button 
+              onClick={triggerFix}
+              className="px-2 py-1 bg-amber-500 text-black text-[9px] font-bold rounded uppercase hover:bg-amber-400 transition-colors"
+            >
+              Enable Now
+            </button>
+          </motion.div>
+        )}
+
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${status?.isHealthy ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-400'}`}>

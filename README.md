@@ -37,11 +37,13 @@ This tool interacts with system-level networking components. Ensure your Linux h
    chmod +x fix-wifi.sh prepare-bundle.sh
    ```
 
-4. **Configure Sudo (Optional but Recommended)**:
-   To allow the web app to trigger fixes without a password prompt, add this to your `/etc/sudoers` (replace `youruser` with your actual username):
+4. **Configure Sudo (Recommended for Seamless UI)**:
+   By default, the server will prompt for your sudo password in the terminal when a fix is triggered. To allow the web app to trigger fixes silently from the browser, add this to your `/etc/sudoers` (run `sudo visudo` to edit):
    ```text
-   youruser ALL=(ALL) NOPASSWD: /path/to/fix-wifi.sh
+   # Replace $(whoami) with your actual username if not running this command directly
+   $(whoami) ALL=(ALL) NOPASSWD: /usr/local/bin/fix-wifi, /usr/bin/iw, /usr/bin/nmcli, /usr/bin/rfkill
    ```
+   *Note: If you prefer to type your password once, simply run `npm run dev` and the first time you click "Fix" in the UI, you can enter the password in the terminal where the server is running. Sudo will cache this for several minutes.*
 
 ## 🏃 Running the Application
 
