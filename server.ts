@@ -14,32 +14,46 @@ const LOG_FILE = path.join(WORKSPACE_DIR, "verbatim_handshake.log");
 const FIX_SCRIPT = fs.existsSync("/usr/local/bin/fix-wifi") 
   ? "/usr/local/bin/fix-wifi" 
   : path.join(WORKSPACE_DIR, "fix-wifi.sh");
+const BUNDLE_SCRIPT = path.join(WORKSPACE_DIR, "prepare-bundle.sh");
+const BUNDLE_DIR = path.join(WORKSPACE_DIR, "offline_bundle");
 
 app.use(express.json());
 
-// API: Get System Status
+let isFixing = false;
+
+// API: Get Unified System Status
 app.get("/api/status", async (req, res) => {
   try {
-    // Check if recovery is disabled by user
     const recoveryEnabled = !fs.existsSync(DISABLE_FLAG);
+    const bundleReady = fs.existsSync(BUNDLE_DIR) && fs.readdirSync(BUNDLE_DIR).some(f => f.endsWith(".fw"));
     
-    // Check network health
-    let isHealthy = false;
-    try {
-      const { stdout } = await execAsync("nmcli networking connectivity");
-      isHealthy = stdout.trim() === "full" || stdout.trim() === "limited";
-    } catch (e) {
-      isHealthy = false;
-    }
+    // Parallelize system calls for efficiency
+    const [connectivity, kernel, powerSave] = await Promise.all([
+      execAsync("nmcli networking connectivity").then(r => r.stdout.trim()).catch(() => "unknown"),
+      execAsync("uname -r").then(r => r.stdout.trim()).catch(() => "unknown"),
+      execAsync("iw dev $(ls /sys/class/net | grep -E '^wl' | head -n1) get power_save 2>/dev/null").then(r => r.stdout.trim()).catch(() => "unknown")
+    ]);
 
     res.json({
       recoveryEnabled,
-      isHealthy,
+      isHealthy: connectivity === "full" || connectivity === "limited",
+      bundleReady,
+      kernel,
+      powerSave,
+      isFixing,
       timestamp: new Date().toISOString()
     });
   } catch (error) {
     res.status(500).json({ error: String(error) });
   }
+});
+
+// API: Prepare Bundle
+app.post("/api/prepare-bundle", (req, res) => {
+  exec(`bash ${BUNDLE_SCRIPT}`, (error, stdout, stderr) => {
+    console.log("Bundle preparation completed", { error, stdout, stderr });
+  });
+  res.json({ message: "Bundle preparation initiated" });
 });
 
 // API: Toggle Recovery
@@ -59,9 +73,12 @@ app.post("/api/toggle-recovery", (req, res) => {
 
 // API: Manual Fix
 app.post("/api/fix", (req, res) => {
-  // Run script in background with --force to bypass user-intent check
+  if (isFixing) return res.status(429).json({ error: "Fix already in progress" });
+  
+  isFixing = true;
   exec(`sudo ${FIX_SCRIPT} --force`, (error, stdout, stderr) => {
-    console.log("Manual fix triggered", { error, stdout, stderr });
+    console.log("Manual fix completed", { error, stdout, stderr });
+    isFixing = false;
   });
   res.json({ message: "Recovery initiated" });
 });
@@ -72,18 +89,9 @@ app.get("/api/logs", async (req, res) => {
     if (!fs.existsSync(LOG_FILE)) {
       return res.json({ logs: "No logs found yet." });
     }
+    // Efficiently get last 100 lines
     const { stdout } = await execAsync(`tail -n 100 ${LOG_FILE}`);
     res.json({ logs: stdout });
-  } catch (error) {
-    res.status(500).json({ error: String(error) });
-  }
-});
-
-// API: Get Kernel Version
-app.get("/api/kernel", async (req, res) => {
-  try {
-    const { stdout } = await execAsync("uname -r");
-    res.json({ kernel: stdout.trim() });
   } catch (error) {
     res.status(500).json({ error: String(error) });
   }

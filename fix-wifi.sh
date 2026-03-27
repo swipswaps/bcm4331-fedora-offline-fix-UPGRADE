@@ -147,7 +147,29 @@ perform_recovery() {
         systemctl start NetworkManager
     fi
 
-    # 4. Driver Strategy (from manifest if exists)
+    # 4. Disable Wi-Fi Power Management (Common cause for b43 drops)
+    echo "→ Disabling Wi-Fi power management..."
+    IFACE=$(ls /sys/class/net 2>/dev/null | grep -E '^wl' | head -n1 || echo "")
+    if [[ -n "$IFACE" ]]; then
+        timeout "$CMD_TIMEOUT_SHORT" iw dev "$IFACE" set power_save off 2>/dev/null || true
+        log_milestone "POWER_SAVE_DISABLED"
+    fi
+
+    # 5. Firmware Injection (CRITICAL FOR OFFLINE)
+    if [[ ! -d "/usr/lib/firmware/b43" ]] || [[ -z "$(ls -A /usr/lib/firmware/b43 2>/dev/null)" ]]; then
+        echo "→ Firmware missing. Checking offline bundle..."
+        if [[ -d "$BUNDLE_DIR" ]] && [[ -n "$(ls -A "$BUNDLE_DIR"/*.fw 2>/dev/null)" ]]; then
+            echo "→ Injecting firmware from bundle..."
+            mkdir -p /usr/lib/firmware/b43
+            cp "$BUNDLE_DIR"/*.fw /usr/lib/firmware/b43/
+            log_milestone "FIRMWARE_INJECTED"
+        else
+            echo "→ WARNING: No firmware found in bundle. Recovery may fail."
+            log_milestone "FIRMWARE_MISSING_NO_BUNDLE"
+        fi
+    fi
+
+    # 6. Driver Strategy (from manifest if exists)
     if [[ -f "$MANIFEST_DB" ]]; then
         K_VER="$(uname -r | cut -d. -f1,2)"
         DB_ENTRY=$(grep -E "^14e4:4331" "$MANIFEST_DB" | head -n1 || echo "")
@@ -160,7 +182,7 @@ perform_recovery() {
         fi
     fi
 
-    # 5. Wait for interface and bring UP
+    # 7. Wait for interface and bring UP
     echo "→ Waiting for interface..."
     IFACE=""
     for i in {1..10}; do
@@ -174,7 +196,7 @@ perform_recovery() {
         ip link set "$IFACE" up 2>/dev/null || true
     fi
 
-    # 6. Final verification
+    # 8. Final verification
     sleep 2
     if system_is_healthy; then
         log_milestone "RECOVERY_SUCCESS"
