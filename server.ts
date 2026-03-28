@@ -79,8 +79,8 @@ app.get("/api/status", async (req, res) => {
       execAsync("nmcli networking").then(r => r.stdout.trim()).catch(() => "unknown"),
       execAsync("nmcli radio wifi").then(r => r.stdout.trim()).catch(() => "unknown"),
       // Verbatim System Events
-      execAsync("sudo journalctl -u NetworkManager -n 5 --no-pager").then(r => r.stdout.trim()).catch(() => ""),
-      execAsync("sudo dmesg | grep -iE 'b43|wl|brcm|mac80211' | tail -n 5").then(r => r.stdout.trim()).catch(() => ""),
+      execAsync("journalctl -u NetworkManager -n 5 --no-pager").then(r => r.stdout.trim()).catch(() => ""),
+      execAsync("dmesg | grep -iE 'b43|wl|brcm|mac80211' | tail -n 5").then(r => r.stdout.trim()).catch(() => ""),
       execAsync("ss -tunp | head -n 8").then(r => r.stdout.trim()).catch(() => ""),
       // Real-time Network Telemetry
       execAsync("ip -4 -brief addr").then(r => r.stdout.trim()).catch(() => ""),

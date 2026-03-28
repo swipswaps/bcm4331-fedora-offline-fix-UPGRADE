@@ -549,11 +549,13 @@ export default function App() {
             {/* Network Health Card */}
             <div className="flex items-center justify-between bg-white/5 p-3 rounded-xl border border-white/5">
               <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${status?.isHealthy ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-400'}`} aria-hidden="true">
-                  {status?.isHealthy ? <Wifi className="w-5 h-5" /> : <WifiOff className="w-5 h-5" />}
+                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${!status ? 'bg-white/5 text-white/20' : status?.isHealthy ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-400'}`} aria-hidden="true">
+                  {!status ? <RefreshCw className="w-5 h-5 animate-spin" /> : status?.isHealthy ? <Wifi className="w-5 h-5" /> : <WifiOff className="w-5 h-5" />}
                 </div>
                 <div>
-                  <h3 className="text-xs font-medium">{status?.isHealthy ? 'Network Healthy' : 'Network Degraded'}</h3>
+                  <h3 className="text-xs font-medium">
+                    {!status ? 'Connecting...' : status?.isHealthy ? 'Network Healthy' : 'Network Degraded'}
+                  </h3>
                   <p className="text-[9px] font-mono opacity-40 uppercase">{status?.kernel || 'Detecting...'}</p>
                 </div>
               </div>
