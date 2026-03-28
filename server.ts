@@ -31,16 +31,17 @@ app.use(express.json());
 let isFixing = false;
 let lastFixError: string | null = null;
 let sudoPromptDetected = false;
+let logBuffer: string[] = [];
 
 // Check if we have passwordless sudo for the fix script
 const checkSudoPermissions = async () => {
   try {
     // -n means non-interactive (fail if password required)
-    // Use --check-only as first arg so script exits immediately
-    await execAsync(`sudo -n "${FIX_SCRIPT}" --check-only`, 1000);
-  } catch (e) {
-    // If it fails, we don't set a flag anymore, we just log it
+    await execAsync(`sudo -n "${FIX_SCRIPT}" --check-only`, 2000);
+    console.log("✅ System integration verified: Passwordless sudo active.");
+  } catch (e: any) {
     console.warn("⚠️ System integration not detected. Sudo may prompt for password.");
+    console.warn(`   Diagnostic: ${e.message}`);
   }
 };
 
@@ -123,6 +124,7 @@ app.post("/api/fix", (req, res) => {
   isFixing = true;
   lastFixError = null;
   sudoPromptDetected = false;
+  logBuffer = [`[${new Date().toISOString()}] Starting recovery process...` ];
 
   // Use sh -c to ensure environment variables are correctly passed through sudo
   const command = `FIX_WIFI_WORKSPACE="${WORKSPACE_DIR}" "${FIX_SCRIPT}" --force`;
@@ -130,13 +132,16 @@ app.post("/api/fix", (req, res) => {
 
   child.stdout.on("data", (data) => {
     const output = data.toString();
-    // Log to server console for debugging
     process.stdout.write(`[FIX STDOUT] ${output}`);
+    logBuffer.push(...output.split("\n").filter(l => l.trim()));
+    if (logBuffer.length > 500) logBuffer = logBuffer.slice(-500);
   });
 
   child.stderr.on("data", (data) => {
     const output = data.toString();
     process.stderr.write(`[FIX STDERR] ${output}`);
+    logBuffer.push(`[ERROR] ${output}`);
+    if (logBuffer.length > 500) logBuffer = logBuffer.slice(-500);
     
     // Detect sudo password prompt
     if (output.toLowerCase().includes("password for") || output.includes("[sudo]")) {
@@ -148,9 +153,11 @@ app.post("/api/fix", (req, res) => {
     isFixing = false;
     if (code !== 0) {
       lastFixError = `Exit code ${code}`;
+      logBuffer.push(`[FATAL] Process exited with code ${code}`);
     } else {
       lastFixError = null;
       sudoPromptDetected = false;
+      logBuffer.push(`[SUCCESS] Recovery completed successfully.`);
     }
     console.log(`Manual fix process exited with code ${code}`);
   });
@@ -161,22 +168,18 @@ app.post("/api/fix", (req, res) => {
 // API: Get Logs
 app.get("/api/logs", async (req, res) => {
   try {
+    // If we are fixing, serve from memory buffer for speed
+    if (isFixing || logBuffer.length > 0) {
+      return res.json({ logs: logBuffer.join("\n") });
+    }
+
     if (!fs.existsSync(LOG_FILE)) {
-      console.log(`[${new Date().toISOString()}] LOGS: Path=${LOG_FILE} | Status=NotFound`);
       return res.json({ logs: "No logs found yet." });
     }
     
-    const stats = fs.statSync(LOG_FILE);
-    const fileSizeKB = (stats.size / 1024).toFixed(2);
-    
-    // Efficiently get last 100 lines with timeout
     const { stdout } = await execAsync(`tail -n 100 ${LOG_FILE}`, 2000);
-    const lineCount = stdout.split("\n").filter(l => l.trim()).length;
-    
-    console.log(`[${new Date().toISOString()}] LOGS: Path=${LOG_FILE} | Size=${fileSizeKB}KB | Lines=${lineCount}`);
     res.json({ logs: stdout });
   } catch (error) {
-    console.error("Error in /api/logs:", error);
     res.status(500).json({ error: String(error) });
   }
 });

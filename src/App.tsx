@@ -187,7 +187,7 @@ export default function App() {
       </div>
 
       {/* Status Summary */}
-      <div className="p-4 space-y-4">
+      <div className="p-4 space-y-4 min-h-[220px] flex flex-col justify-center">
         {/* Sudo Warning */}
         {status?.sudoPromptDetected && (
           <motion.div 
@@ -213,7 +213,7 @@ export default function App() {
           </div>
         )}
 
-        {(!status?.networkingEnabled || !status?.wifiEnabled) && status?.networkingEnabled !== undefined && (
+        {(!status?.networkingEnabled || !status?.wifiEnabled) && status?.networkingEnabled !== undefined && !status?.isFixing && (
           <motion.div 
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -256,16 +256,16 @@ export default function App() {
         </div>
 
         {/* Progress Bar if Fixing */}
-        {status?.isFixing && (
-          <div className="h-1 w-full bg-white/5 rounded-full overflow-hidden">
+        <div className="h-1 w-full bg-white/5 rounded-full overflow-hidden">
+          {status?.isFixing && (
             <motion.div 
               initial={{ x: "-100%" }}
               animate={{ x: "100%" }}
               transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }}
               className="h-full w-1/3 bg-blue-500"
             />
-          </div>
-        )}
+          )}
+        </div>
 
         {/* Toggles */}
         <div className="space-y-1">
