@@ -50,6 +50,13 @@ log_milestone() {
     local msg="$1"
     echo "→ MILESTONE: $msg"
     echo "→ MILESTONE: $msg" >> "$TRACE_LOG"
+    
+    # Capture a snapshot of system logs at each milestone
+    if [[ -f "$TRACE_LOG" ]]; then
+        echo "[SYSTEM SNAPSHOT @ $(date +%H:%M:%S)]" >> "$TRACE_LOG"
+        journalctl -n 5 --no-pager -u NetworkManager -t kernel | grep -E "wlp|b43|wl0|NetworkManager" >> "$TRACE_LOG" 2>/dev/null || true
+        echo "------------------------------------" >> "$TRACE_LOG"
+    fi
 }
 
 # -------------------------
@@ -79,12 +86,14 @@ trap cleanup EXIT INT TERM
 # TRACE STREAM
 # -------------------------
 start_trace_stream() {
+    # Clear log file at start
+    echo "=== TRACE START $(date) ===" > "$TRACE_LOG"
+    
     {
-        echo "=== TRACE START $(date) ==="
         timeout "$CMD_TIMEOUT_SHORT" journalctl -n 50 --no-pager 2>/dev/null || echo "journal unavailable"
         echo ""
         timeout "$CMD_TIMEOUT_SHORT" dmesg | tail -n 50 2>/dev/null || true
-        echo "=== TRACE END $(date) ==="
+        echo "=== INITIAL SNAPSHOT END ==="
     } >> "$TRACE_LOG" &
 
     TRACE_PID=$!
