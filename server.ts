@@ -55,25 +55,60 @@ app.get("/api/status", async (req, res) => {
     const BUNDLE_DIR = path.join(WORKSPACE_DIR, "offline_bundle");
     const bundleReady = fs.existsSync(BUNDLE_DIR) && fs.readdirSync(BUNDLE_DIR).some(f => f.endsWith(".fw"));
     
-    const [connectivity, kernel, powerSave, networkingState, wifiState] = await Promise.all([
+    const [connectivity, kernel, powerSave, networkingState, wifiState, nmLogs, kernelLogs, sockets, ipAddr, wifiLink, nearbyAPs] = await Promise.all([
       execAsync("nmcli networking connectivity").then(r => r.stdout.trim()).catch(() => "unknown"),
       execAsync("uname -r").then(r => r.stdout.trim()).catch(() => "unknown"),
       execAsync("iw dev $(ls /sys/class/net | grep -E '^wl' | head -n1) get power_save 2>/dev/null").then(r => r.stdout.trim()).catch(() => "unknown"),
       execAsync("nmcli networking").then(r => r.stdout.trim()).catch(() => "unknown"),
-      execAsync("nmcli radio wifi").then(r => r.stdout.trim()).catch(() => "unknown")
+      execAsync("nmcli radio wifi").then(r => r.stdout.trim()).catch(() => "unknown"),
+      // Verbatim System Events
+      execAsync("sudo journalctl -u NetworkManager -n 5 --no-pager").then(r => r.stdout.trim()).catch(() => ""),
+      execAsync("sudo dmesg | grep -iE 'b43|wl|brcm|mac80211' | tail -n 5").then(r => r.stdout.trim()).catch(() => ""),
+      execAsync("ss -tunp | head -n 8").then(r => r.stdout.trim()).catch(() => ""),
+      // Real-time Network Telemetry
+      execAsync("ip -4 -brief addr").then(r => r.stdout.trim()).catch(() => ""),
+      execAsync("iw dev $(ls /sys/class/net | grep -E '^wl' | head -n1) link").then(r => r.stdout.trim()).catch(() => ""),
+      execAsync("nmcli -t -f SSID,SIGNAL,BARS device wifi list | head -n 5").then(r => r.stdout.trim()).catch(() => "")
     ]);
 
     const isHealthy = connectivity === "full" || connectivity === "limited";
     
-    // Enhanced terminal logging for system transparency
+    // Verbatim Terminal Logging for System Transparency
     const healthIcon = isHealthy ? "✅" : "⚠️";
     const wifiIcon = wifiState === "enabled" ? "📶" : "❌";
     const netIcon = networkingState === "enabled" ? "🌐" : "🚫";
     const bundleIcon = bundleReady ? "📦" : "❓";
     
-    console.log(`[${new Date().toLocaleTimeString()}] 🛰️  SYSTEM STATUS:`);
+    console.log(`\n[${new Date().toLocaleTimeString()}] 🛰️  SYSTEM STATUS:`);
     console.log(`    Health: ${healthIcon} (${connectivity}) | Wi-Fi: ${wifiIcon} | Net: ${netIcon} | Sudo: ${sudoPromptDetected ? "🔓" : "🔒"}`);
     console.log(`    Kernel: ${kernel} | PowerSave: ${powerSave} | Bundle: ${bundleIcon} ${bundleReady ? "Ready" : "Missing"}`);
+
+    if (ipAddr) {
+      console.log(`    📡 NETWORK INTERFACES (VERBATIM):`);
+      ipAddr.split('\n').forEach(line => console.log(`       ${line}`));
+    }
+
+    if (wifiLink && wifiLink.includes("Connected")) {
+      console.log(`    📶 WI-FI LINK (VERBATIM):`);
+      wifiLink.split('\n').forEach(line => console.log(`       ${line.trim()}`));
+    }
+
+    if (nmLogs) {
+      console.log(`    📡 NETWORK MANAGER (VERBATIM):`);
+      nmLogs.split('\n').forEach(line => console.log(`       ${line.substring(0, 120)}`));
+    }
+    if (kernelLogs) {
+      console.log(`    🐧 KERNEL/DRIVER (VERBATIM):`);
+      kernelLogs.split('\n').forEach(line => console.log(`       ${line.substring(0, 120)}`));
+    }
+    if (sockets) {
+      console.log(`    🔌 ACTIVE SOCKETS (VERBATIM):`);
+      sockets.split('\n').forEach(line => console.log(`       ${line.substring(0, 120)}`));
+    }
+    if (nearbyAPs) {
+      console.log(`    📡 NEARBY ACCESS POINTS:`);
+      nearbyAPs.split('\n').forEach(line => console.log(`       ${line}`));
+    }
 
     res.json({
       recoveryEnabled,
