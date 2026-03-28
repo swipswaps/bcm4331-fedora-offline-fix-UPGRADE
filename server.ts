@@ -65,11 +65,15 @@ app.get("/api/status", async (req, res) => {
 
     const isHealthy = connectivity === "full" || connectivity === "limited";
     
-    // Restore detailed terminal logging for the user
+    // Enhanced terminal logging for system transparency
     const healthIcon = isHealthy ? "✅" : "⚠️";
     const wifiIcon = wifiState === "enabled" ? "📶" : "❌";
     const netIcon = networkingState === "enabled" ? "🌐" : "🚫";
-    console.log(`[${new Date().toLocaleTimeString()}] STATUS: Health:${healthIcon} | Wi-Fi:${wifiIcon} | Net:${netIcon} | Sudo:${sudoPromptDetected ? "🔓" : "🔒"}`);
+    const bundleIcon = bundleReady ? "📦" : "❓";
+    
+    console.log(`[${new Date().toLocaleTimeString()}] 🛰️  SYSTEM STATUS:`);
+    console.log(`    Health: ${healthIcon} (${connectivity}) | Wi-Fi: ${wifiIcon} | Net: ${netIcon} | Sudo: ${sudoPromptDetected ? "🔓" : "🔒"}`);
+    console.log(`    Kernel: ${kernel} | PowerSave: ${powerSave} | Bundle: ${bundleIcon} ${bundleReady ? "Ready" : "Missing"}`);
 
     res.json({
       recoveryEnabled,
@@ -132,6 +136,7 @@ app.post("/api/fix", (req, res) => {
   sudoPromptDetected = false;
   logBuffer = []; // Clear buffer for new run
   logBuffer.push(`[${new Date().toISOString()}] 🛰️ Recovery sequence initiated...`);
+  console.log(`[${new Date().toLocaleTimeString()}] 🛰️  RECOVERY INITIATED: Running ${FIX_SCRIPT} --force`);
 
   // Use sh -c to ensure environment variables are correctly passed through sudo
   const command = `FIX_WIFI_WORKSPACE="${WORKSPACE_DIR}" "${FIX_SCRIPT}" --force`;
@@ -187,9 +192,11 @@ app.get("/api/logs", async (req, res) => {
     
     const { stdout } = await execAsync(`tail -n 100 ${LOG_FILE}`, 2000);
     
-    // Restore terminal visibility for the user
+    // Enhanced polling visibility with log tail summary
     const stats = fs.statSync(LOG_FILE);
-    console.log(`[${new Date().toLocaleTimeString()}] POLLING: ${path.basename(LOG_FILE)} (${(stats.size / 1024).toFixed(1)}KB)`);
+    const lastLine = stdout.trim().split('\n').pop() || "Empty";
+    console.log(`[${new Date().toLocaleTimeString()}] 📝 POLLING: ${path.basename(LOG_FILE)} (${(stats.size / 1024).toFixed(1)}KB)`);
+    console.log(`    Last Entry: ${lastLine.substring(0, 80)}${lastLine.length > 80 ? "..." : ""}`);
     
     res.json({ logs: stdout });
   } catch (error) {
