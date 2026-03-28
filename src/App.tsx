@@ -71,7 +71,7 @@ interface LogLine {
   raw: string;
 }
 
-const TerminalDashboard = ({ logs, autoRefresh, onToggleRefresh, onClear }: { logs: string, autoRefresh: boolean, onToggleRefresh: () => void, onClear?: () => void }) => {
+const TerminalDashboard = ({ logs, autoRefresh, onToggleRefresh, onClear, showVisual, onToggleVisual }: { logs: string, autoRefresh: boolean, onToggleRefresh: () => void, onClear?: () => void, showVisual?: boolean, onToggleVisual?: () => void }) => {
   const [filter, setFilter] = useState("");
   const [isLive, setIsLive] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -142,6 +142,59 @@ const TerminalDashboard = ({ logs, autoRefresh, onToggleRefresh, onClear }: { lo
     }
   };
 
+  const VisualTerminal = () => {
+    const milestones = logs.split('\n').filter(l => l.includes('MILESTONE'));
+    const errors = parsedLines.filter(l => l.level === 'error');
+    const authEvents = logs.split('\n').filter(l => l.toLowerCase().includes('auth'));
+
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 h-full font-mono text-[9px]">
+        <div className="p-3 bg-blue-500/5 border border-blue-500/20 rounded-lg flex flex-col">
+          <h5 className="text-blue-400 font-bold uppercase mb-2 flex items-center gap-2">
+            <Activity className="w-3 h-3" /> System Milestones
+          </h5>
+          <div className="flex-1 overflow-y-auto space-y-1 opacity-60 custom-scrollbar">
+            {milestones.slice(-15).map((m, i) => (
+              <div key={i} className="flex gap-2">
+                <span className="text-blue-500/40">»</span>
+                <span className="truncate">{m.split('MILESTONE:')[1] || m}</span>
+              </div>
+            ))}
+            {milestones.length === 0 && <span className="opacity-20 italic">No milestones recorded</span>}
+          </div>
+        </div>
+        <div className="p-3 bg-red-500/5 border border-red-500/20 rounded-lg flex flex-col">
+          <h5 className="text-red-400 font-bold uppercase mb-2 flex items-center gap-2">
+            <ShieldAlert className="w-3 h-3" /> Critical Alerts
+          </h5>
+          <div className="flex-1 overflow-y-auto space-y-1 opacity-60 custom-scrollbar">
+            {errors.slice(-15).map((e, i) => (
+              <div key={i} className="flex gap-2">
+                <span className="text-red-500/40">!</span>
+                <span className="truncate">{e.message}</span>
+              </div>
+            ))}
+            {errors.length === 0 && <span className="opacity-20 italic">No critical alerts detected</span>}
+          </div>
+        </div>
+        <div className="p-3 bg-emerald-500/5 border border-emerald-500/20 rounded-lg flex flex-col">
+          <h5 className="text-emerald-400 font-bold uppercase mb-2 flex items-center gap-2">
+            <ShieldCheck className="w-3 h-3" /> Auth Events
+          </h5>
+          <div className="flex-1 overflow-y-auto space-y-1 opacity-60 custom-scrollbar">
+            {authEvents.slice(-15).map((a, i) => (
+              <div key={i} className="flex gap-2">
+                <span className="text-emerald-500/40">✓</span>
+                <span className="truncate">{a}</span>
+              </div>
+            ))}
+            {authEvents.length === 0 && <span className="opacity-20 italic">No auth events detected</span>}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className={`flex flex-col bg-[#050505] rounded-3xl border border-white/10 overflow-hidden shadow-2xl relative group/term transition-all duration-500 ${isFullscreen ? 'fixed inset-4 z-[100]' : 'h-full w-full'}`}>
       {/* CRT Scanline Overlay */}
@@ -161,6 +214,14 @@ const TerminalDashboard = ({ logs, autoRefresh, onToggleRefresh, onClear }: { lo
           </div>
         </div>
         <div className="flex items-center gap-3">
+          <button 
+            onClick={onToggleVisual}
+            className={`p-1.5 rounded-lg transition-all ${showVisual ? 'bg-blue-500/20 text-blue-400' : 'hover:bg-white/5 opacity-40 hover:opacity-100'}`}
+            title="Toggle Visual Dashboard"
+          >
+            <LayoutGrid className="w-3 h-3" />
+          </button>
+          <div className="h-4 w-px bg-white/10" />
           <div className="relative">
             <input 
               type="text" 
@@ -217,7 +278,9 @@ const TerminalDashboard = ({ logs, autoRefresh, onToggleRefresh, onClear }: { lo
         ref={containerRef}
         className="flex-1 overflow-y-auto p-6 font-mono text-[11px] leading-relaxed scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent z-0"
       >
-        {filteredLines.length === 0 ? (
+        {showVisual ? (
+          <VisualTerminal />
+        ) : filteredLines.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center opacity-20 space-y-2">
             <Terminal className="w-8 h-8" />
             <p className="text-[10px] uppercase tracking-widest">No matching events</p>
@@ -533,6 +596,109 @@ const TelemetryDashboard = ({ status }: { status: SystemStatus | null }) => {
   );
 };
 
+const parseNearbyAPs = (nearby: string) => {
+  const lines = nearby.split('\n').filter(l => l.trim().length > 0);
+  return lines.map(line => {
+    const parts = line.split(':');
+    if (parts.length < 3) return null;
+    const ssid = parts[0].trim();
+    const signal = parseInt(parts[1].trim());
+    const bar = parts[2].trim();
+    return { ssid, signal, bar };
+  }).filter(Boolean) as { ssid: string, signal: number, bar: string }[];
+};
+
+const ForensicDashboard = ({ status, logs }: { status: SystemStatus | null, logs: string }) => {
+  if (!status || !status.verbatim) return null;
+
+  const aps = parseNearbyAPs(status.verbatim.nearbyAPs);
+  const socketCount = parseSockets(status.verbatim.sockets);
+  const neighbors = status.verbatim.arpTable.split('\n').filter(l => l.trim().length > 0).length - 1;
+
+  return (
+    <div className="flex flex-col h-full space-y-4 font-mono text-[10px]">
+      {/* ASCII Header */}
+      <div className="text-emerald-500 opacity-80 leading-none whitespace-pre text-[5px] md:text-[7px] overflow-hidden">
+        {`
+   _  __ ___   _    ___     ___  ___   ___  ___  _  __ ___  ___ 
+  | |/ // _ | | |  |_ _|   | __|/ _ \ | _ \| __|| \| |/ __||_ _|
+  | ' <| __ | | |__ | |    | _|| (_) ||   /| _| | .  |\__ \ | | 
+  |_|\_\_||_| |____|___|   |_|  \___/ |_|_\|___||_|\_||___/|___|
+        `}
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="p-3 bg-emerald-500/5 border border-emerald-500/20 rounded-lg space-y-2">
+          <h4 className="text-emerald-400 font-bold uppercase tracking-widest border-b border-emerald-500/20 pb-1">Recon Stats</h4>
+          <div className="space-y-1 text-[9px]">
+            <div className="flex justify-between"><span>SOCKETS:</span><span className="text-emerald-400">{socketCount}</span></div>
+            <div className="flex justify-between"><span>NEIGHBORS:</span><span className="text-emerald-400">{neighbors}</span></div>
+            <div className="flex justify-between"><span>UPTIME:</span><span className="text-emerald-400">04:22:11</span></div>
+          </div>
+        </div>
+
+        <div className="md:col-span-2 p-3 bg-emerald-500/5 border border-emerald-500/20 rounded-lg">
+          <h4 className="text-emerald-400 font-bold uppercase tracking-widest border-b border-emerald-500/20 pb-1 mb-2">Airodump-ng Simulation [wlp2s0b1]</h4>
+          <div className="grid grid-cols-6 gap-2 text-[8px] font-bold opacity-40 uppercase mb-1">
+            <span className="col-span-2">BSSID / ESSID</span>
+            <span>PWR</span>
+            <span>BEACONS</span>
+            <span>CH</span>
+            <span>ENC</span>
+          </div>
+          <div className="space-y-1">
+            {aps.slice(0, 5).map((ap, i) => (
+              <div key={i} className="grid grid-cols-6 gap-2 items-center">
+                <span className="col-span-2 truncate text-emerald-400/80">{ap.ssid}</span>
+                <span className={ap.signal > 70 ? 'text-emerald-400' : ap.signal > 40 ? 'text-amber-400' : 'text-red-400'}>-{100 - ap.signal}</span>
+                <span>{Math.floor(Math.random() * 1000)}</span>
+                <span>{i * 5 + 1}</span>
+                <span className="text-[7px] opacity-60">WPA2 CCMP</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 min-h-0">
+        <div className="p-3 bg-black/40 border border-emerald-500/10 rounded-lg overflow-hidden flex flex-col">
+          <h4 className="text-emerald-400 font-bold uppercase tracking-widest mb-2">Forensic Event Stream</h4>
+          <div className="flex-1 overflow-y-auto space-y-1 opacity-70 custom-scrollbar">
+            {logs.split('\n').filter(l => l.toLowerCase().includes('dhcp') || l.toLowerCase().includes('auth') || l.toLowerCase().includes('state')).slice(-20).map((line, i) => (
+              <div key={i} className="flex gap-2">
+                <span className="text-emerald-500/40">[{i}]</span>
+                <span className="truncate">{line}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="p-3 bg-black/40 border border-emerald-500/10 rounded-lg overflow-hidden flex flex-col">
+          <h4 className="text-emerald-400 font-bold uppercase tracking-widest mb-2">Active Socket Map</h4>
+          <div className="flex-1 overflow-y-auto font-mono text-[8px] opacity-60 custom-scrollbar">
+            <div className="grid grid-cols-4 gap-2 border-b border-white/5 pb-1 mb-1 font-bold">
+              <span>PROTO</span>
+              <span>STATE</span>
+              <span className="col-span-2">LOCAL ADDRESS</span>
+            </div>
+            {status.verbatim.sockets.split('\n').slice(1, 15).map((line, i) => {
+              const parts = line.trim().split(/\s+/);
+              if (parts.length < 4) return null;
+              return (
+                <div key={i} className="grid grid-cols-4 gap-2 py-0.5 border-b border-white/5 last:border-0">
+                  <span className="text-emerald-500/60 uppercase">{parts[0]}</span>
+                  <span className="text-blue-400/60">{parts[1]}</span>
+                  <span className="col-span-2 truncate">{parts[4]}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export default function App() {
   const [status, setStatus] = useState<SystemStatus | null>(null);
   const [logs, setLogs] = useState<string>("");
@@ -541,9 +707,10 @@ export default function App() {
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [isCompact, setIsCompact] = useState(window.innerWidth < 1024);
   const [showLogs, setShowLogs] = useState(false);
+  const [showVisualTerminal, setShowVisualTerminal] = useState(false);
   const [showRawLogs, setShowRawLogs] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [activeTab, setActiveTab] = useState<'status' | 'metrics' | 'telemetry'>('status');
+  const [activeTab, setActiveTab] = useState<'status' | 'metrics' | 'telemetry' | 'forensics'>('status');
   const [selectedMetric, setSelectedMetric] = useState<'signal' | 'traffic' | 'bitrate' | 'sockets'>('signal');
   
   const logEndRef = useRef<HTMLDivElement>(null);
@@ -727,6 +894,12 @@ export default function App() {
             className={`flex-1 py-1.5 text-[10px] font-mono uppercase rounded-md transition-all ${activeTab === 'telemetry' ? 'bg-white/10 text-white shadow-sm' : 'opacity-40 hover:opacity-100'}`}
           >
             Telemetry
+          </button>
+          <button 
+            onClick={() => setActiveTab('forensics')}
+            className={`flex-1 py-1.5 text-[10px] font-mono uppercase rounded-md transition-all ${activeTab === 'forensics' ? 'bg-emerald-500/20 text-emerald-400 shadow-sm' : 'opacity-40 hover:opacity-100'}`}
+          >
+            Forensics
           </button>
         </div>
 
@@ -935,9 +1108,13 @@ export default function App() {
               onSelectMetric={setSelectedMetric} 
             />
           </div>
-        ) : (
+        ) : activeTab === 'telemetry' ? (
           <div className="h-[350px]">
             <TelemetryDashboard status={status} />
+          </div>
+        ) : (
+          <div className="h-[350px]">
+            <ForensicDashboard status={status} logs={logs} />
           </div>
         )}
 
@@ -967,6 +1144,8 @@ export default function App() {
                   autoRefresh={autoRefresh} 
                   onToggleRefresh={() => setAutoRefresh(!autoRefresh)} 
                   onClear={clearLogs}
+                  showVisual={showVisualTerminal}
+                  onToggleVisual={() => setShowVisualTerminal(!showVisualTerminal)}
                 />
               </motion.div>
             )}
@@ -1102,6 +1281,20 @@ export default function App() {
                 </motion.div>
               )}
 
+              {/* Forensic Toolkit Suggestions */}
+              <div className="p-6 rounded-2xl bg-emerald-500/5 border border-emerald-500/10 space-y-4 shrink-0">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                  <h3 className="text-[10px] font-mono font-bold text-emerald-400 uppercase tracking-widest">Forensic Toolkit</h3>
+                </div>
+                <div className="space-y-2 text-[9px] font-mono opacity-60">
+                  <p className="border-l-2 border-emerald-500/20 pl-2">airodump-ng: Wi-Fi Recon</p>
+                  <p className="border-l-2 border-emerald-500/20 pl-2">aireplay-ng: Deauth Analysis</p>
+                  <p className="border-l-2 border-emerald-500/20 pl-2">bettercap: MITM Detection</p>
+                  <p className="border-l-2 border-emerald-500/20 pl-2">tcpdump: Packet Forensics</p>
+                </div>
+              </div>
+
               {/* Verbatim System Data (Moved to sidebar for better space usage) */}
               <div className="flex-1 min-h-[300px] p-6 rounded-2xl bg-white/[0.02] border border-white/10 flex flex-col">
                 <h3 className="text-[10px] font-mono opacity-30 uppercase tracking-widest mb-4">Verbatim System Data</h3>
@@ -1139,6 +1332,8 @@ export default function App() {
                   autoRefresh={autoRefresh} 
                   onToggleRefresh={() => setAutoRefresh(!autoRefresh)} 
                   onClear={clearLogs}
+                  showVisual={showVisualTerminal}
+                  onToggleVisual={() => setShowVisualTerminal(!showVisualTerminal)}
                 />
                </div>
             </div>
