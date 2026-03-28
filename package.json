@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
+    "setup": "chmod +x setup-system.sh && ./setup-system.sh",
+    "postinstall": "npm run setup || true",
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist",

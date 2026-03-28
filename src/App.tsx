@@ -33,7 +33,6 @@ interface SystemStatus {
   isFixing: boolean;
   lastFixError: string | null;
   sudoPromptDetected: boolean;
-  needsSystemSetup: boolean;
   timestamp: string;
 }
 
@@ -119,24 +118,6 @@ export default function App() {
     }
   };
 
-  const [setupLoading, setSetupLoading] = useState(false);
-
-  const triggerSetup = async () => {
-    setSetupLoading(true);
-    try {
-      const res = await fetch("/api/setup-system", { method: "POST" });
-      if (res.ok) {
-        fetchStatus();
-      } else {
-        const data = await res.json();
-        alert(`Setup failed: ${data.error}`);
-      }
-    } catch (e) {
-      console.error("Setup error", e);
-    } finally {
-      setSetupLoading(false);
-    }
-  };
   const triggerFix = async () => {
     setLoading(true);
     try {
@@ -204,26 +185,6 @@ export default function App() {
           </button>
         </div>
       </div>
-
-      {/* System Integration Warning */}
-      {status?.needsSystemSetup && (
-        <div className="mx-4 p-4 rounded-2xl bg-blue-500/10 border border-blue-500/20 space-y-3">
-          <div className="flex items-center gap-3">
-            <ShieldCheck className="w-5 h-5 text-blue-400" />
-            <h3 className="text-xs font-bold text-blue-200 uppercase tracking-wider">System Integration Required</h3>
-          </div>
-          <p className="text-[10px] text-blue-200/60 leading-relaxed">
-            To enable one-click recovery without password prompts, the control center needs to install its system-wide helper.
-          </p>
-          <button 
-            onClick={triggerSetup}
-            disabled={setupLoading}
-            className="w-full py-2 rounded-xl bg-blue-500 text-white text-[10px] font-bold uppercase tracking-widest hover:bg-blue-400 transition-colors disabled:opacity-50"
-          >
-            {setupLoading ? "Installing..." : "Install System Integration"}
-          </button>
-        </div>
-      )}
 
       {/* Status Summary */}
       <div className="p-4 space-y-4">
