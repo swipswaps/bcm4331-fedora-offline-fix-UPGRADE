@@ -66,6 +66,7 @@ const checkSudoPermissions = async () => {
   } catch (e: any) {
     sudoPromptDetected = true;
     console.warn("ℹ️ System integration pending: Sudo requires password or script missing.");
+    console.log(`   Diagnostic: ${e.message}`);
     console.log("   This is normal if you haven't run 'bash setup-system.sh' yet.");
   }
 };

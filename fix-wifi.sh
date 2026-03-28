@@ -309,5 +309,5 @@ main() {
     fi
 }
 
-main
+main "$@"
 exit $?
