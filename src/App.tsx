@@ -187,55 +187,53 @@ export default function App() {
       </div>
 
       {/* Status Summary */}
-      <div className="p-4 space-y-4 min-h-[220px] flex flex-col justify-center">
-        {/* Sudo Warning */}
-        {status?.sudoPromptDetected && (
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="p-3 bg-red-500/20 border border-red-500/30 rounded-lg space-y-2"
-          >
-            <div className="flex items-center gap-2">
-              <ShieldAlert className="w-4 h-4 text-red-400" aria-hidden="true" />
-              <span className="text-[10px] font-bold text-red-200 uppercase tracking-tight">Sudo Password Required</span>
-            </div>
-            <p className="text-[9px] text-red-200/70 leading-relaxed">
-              The recovery script is waiting for a password in your terminal. 
-              Please check the terminal where you ran <code className="bg-black/40 px-1">npm run dev</code>.
-            </p>
-          </motion.div>
-        )}
-
-        {/* Error Message */}
-        {status?.lastFixError && !status.isFixing && (
-          <div className="p-2 bg-red-500/10 border border-red-500/20 rounded text-[9px] text-red-400 font-mono">
-            LAST ERROR: {status.lastFixError}
-          </div>
-        )}
-
-        {(!status?.networkingEnabled || !status?.wifiEnabled) && status?.networkingEnabled !== undefined && !status?.isFixing && (
-          <motion.div 
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="p-3 bg-amber-500/20 border border-amber-500/30 rounded-lg flex items-center justify-between gap-3"
-            role="alert"
-          >
-            <div className="flex items-center gap-2">
-              <ShieldAlert className="w-4 h-4 text-amber-400" aria-hidden="true" />
-              <span className="text-[10px] font-medium text-amber-200 uppercase">
-                {!status.networkingEnabled ? 'Networking Disabled' : 'Wi-Fi Radio Disabled'}
-              </span>
-            </div>
-            <button 
-              onClick={triggerFix}
-              className="px-2 py-1 bg-amber-500 text-black text-[9px] font-bold rounded uppercase hover:bg-amber-400 transition-colors focus:ring-2 focus:ring-white outline-none"
+      <div className="p-4 space-y-4">
+        {/* Fixed-height Slot for Banners to prevent jumping */}
+        <div className="min-h-[64px] flex flex-col justify-center">
+          {/* Sudo Warning */}
+          {status?.sudoPromptDetected && (
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="p-3 bg-red-500/20 border border-red-500/30 rounded-lg flex items-start gap-3"
+              role="alert"
             >
-              Enable Now
-            </button>
-          </motion.div>
-        )}
+              <ShieldAlert className="w-4 h-4 text-red-400 mt-0.5" aria-hidden="true" />
+              <div className="flex-1">
+                <span className="text-[10px] font-bold text-red-200 uppercase tracking-tight">Sudo Password Required</span>
+                <p className="text-[9px] text-red-200/70 leading-relaxed">
+                  Waiting for password in terminal.
+                </p>
+              </div>
+            </motion.div>
+          )}
 
-        <div className="flex items-center justify-between">
+          {/* Enable Now Banner */}
+          {(!status?.networkingEnabled || !status?.wifiEnabled) && status?.networkingEnabled !== undefined && !status?.isFixing && !status?.sudoPromptDetected && (
+            <motion.div 
+              initial={{ opacity: 0, y: -5 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="p-3 bg-amber-500/20 border border-amber-500/30 rounded-lg flex items-center justify-between gap-3"
+              role="alert"
+            >
+              <div className="flex items-center gap-2">
+                <ShieldAlert className="w-4 h-4 text-amber-400" aria-hidden="true" />
+                <span className="text-[10px] font-medium text-amber-200 uppercase">
+                  {!status.networkingEnabled ? 'Networking Disabled' : 'Wi-Fi Radio Disabled'}
+                </span>
+              </div>
+              <button 
+                onClick={triggerFix}
+                className="px-2 py-1 bg-amber-500 text-black text-[9px] font-bold rounded uppercase hover:bg-amber-400 transition-colors"
+              >
+                Enable
+              </button>
+            </motion.div>
+          )}
+        </div>
+
+        {/* Network Health Card */}
+        <div className="flex items-center justify-between bg-white/5 p-3 rounded-xl border border-white/5">
           <div className="flex items-center gap-3">
             <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${status?.isHealthy ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-400'}`} aria-hidden="true">
               {status?.isHealthy ? <Wifi className="w-5 h-5" /> : <WifiOff className="w-5 h-5" />}
@@ -248,21 +246,20 @@ export default function App() {
           <button 
             onClick={triggerFix}
             disabled={loading || status?.isFixing}
-            aria-label="Refresh network status"
-            className="p-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition-all active:scale-95 focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-30"
+            className="p-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition-all active:scale-95 disabled:opacity-30"
           >
             <RefreshCw className={`w-4 h-4 ${loading || status?.isFixing ? 'animate-spin' : 'opacity-60'}`} />
           </button>
         </div>
 
-        {/* Progress Bar if Fixing */}
+        {/* Progress Bar Slot */}
         <div className="h-1 w-full bg-white/5 rounded-full overflow-hidden">
           {status?.isFixing && (
             <motion.div 
               initial={{ x: "-100%" }}
               animate={{ x: "100%" }}
               transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }}
-              className="h-full w-1/3 bg-blue-500"
+              className="h-full w-1/3 bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.5)]"
             />
           )}
         </div>

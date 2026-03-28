@@ -124,7 +124,8 @@ app.post("/api/fix", (req, res) => {
   isFixing = true;
   lastFixError = null;
   sudoPromptDetected = false;
-  logBuffer = [`[${new Date().toISOString()}] Starting recovery process...` ];
+  logBuffer = []; // Clear buffer for new run
+  logBuffer.push(`[${new Date().toISOString()}] 🛰️ Recovery sequence initiated...`);
 
   // Use sh -c to ensure environment variables are correctly passed through sudo
   const command = `FIX_WIFI_WORKSPACE="${WORKSPACE_DIR}" "${FIX_SCRIPT}" --force`;
@@ -168,16 +169,22 @@ app.post("/api/fix", (req, res) => {
 // API: Get Logs
 app.get("/api/logs", async (req, res) => {
   try {
-    // If we are fixing, serve from memory buffer for speed
-    if (isFixing || logBuffer.length > 0) {
+    // If we are actively fixing, serve from the live memory buffer
+    if (isFixing && logBuffer.length > 0) {
       return res.json({ logs: logBuffer.join("\n") });
     }
 
+    // Otherwise, fall back to the persistent log file
     if (!fs.existsSync(LOG_FILE)) {
-      return res.json({ logs: "No logs found yet." });
+      return res.json({ logs: "Waiting for telemetry..." });
     }
     
     const { stdout } = await execAsync(`tail -n 100 ${LOG_FILE}`, 2000);
+    
+    // Restore terminal visibility for the user
+    const stats = fs.statSync(LOG_FILE);
+    console.log(`[${new Date().toLocaleTimeString()}] POLLING: ${path.basename(LOG_FILE)} (${(stats.size / 1024).toFixed(1)}KB)`);
+    
     res.json({ logs: stdout });
   } catch (error) {
     res.status(500).json({ error: String(error) });
