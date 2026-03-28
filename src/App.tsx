@@ -1225,6 +1225,33 @@ export default function App() {
               </div>
             </div>
             <div className="flex items-center gap-3">
+              <div className="hidden md:flex items-center gap-1 mr-4 p-1 bg-white/5 rounded-xl border border-white/10">
+                <button 
+                  onClick={() => setActiveTab('status')}
+                  className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-all ${activeTab === 'status' ? 'bg-white/10 text-white shadow-sm' : 'opacity-40 hover:opacity-100'}`}
+                >
+                  Status
+                </button>
+                <button 
+                  onClick={() => setActiveTab('metrics')}
+                  className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-all ${activeTab === 'metrics' ? 'bg-white/10 text-white shadow-sm' : 'opacity-40 hover:opacity-100'}`}
+                >
+                  Metrics
+                </button>
+                <button 
+                  onClick={() => setActiveTab('telemetry')}
+                  className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-all ${activeTab === 'telemetry' ? 'bg-white/10 text-white shadow-sm' : 'opacity-40 hover:opacity-100'}`}
+                >
+                  Telemetry
+                </button>
+                <button 
+                  onClick={() => setActiveTab('forensics')}
+                  className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-all ${activeTab === 'forensics' ? 'bg-emerald-500/20 text-emerald-400 shadow-sm' : 'opacity-40 hover:opacity-100'}`}
+                >
+                  Forensics
+                </button>
+              </div>
+
               <div className="hidden md:flex items-center gap-6 mr-6 px-6 py-2 rounded-xl bg-white/[0.02] border border-white/5">
                 <div className="flex flex-col">
                   <span className="text-[8px] font-mono opacity-30 uppercase tracking-widest">Uptime</span>
@@ -1344,38 +1371,90 @@ export default function App() {
               </div>
             </div>
 
-            {/* Right Column: Metrics & Terminal */}
+            {/* Right Column: Dynamic Content based on Active Tab */}
             <div className="lg:col-span-9 flex flex-col gap-6 min-h-0">
-               {/* Metrics Chart */}
-               <div className="flex-[2] p-6 rounded-2xl bg-white/[0.02] border border-white/10 flex flex-col min-h-0">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                      <h3 className="text-[10px] font-mono opacity-30 uppercase tracking-widest">Network Telemetry</h3>
-                      <span className="px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 text-[8px] font-mono uppercase animate-pulse">Live</span>
+              {activeTab === 'status' && (
+                <>
+                  {/* Metrics Chart */}
+                  <div className="flex-[2] p-6 rounded-2xl bg-white/[0.02] border border-white/10 flex flex-col min-h-0">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-3">
+                        <h3 className="text-[10px] font-mono opacity-30 uppercase tracking-widest">Network Telemetry</h3>
+                        <span className="px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 text-[8px] font-mono uppercase animate-pulse">Live</span>
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={() => setSelectedMetric('signal')} className={`px-2 py-1 rounded text-[9px] font-mono uppercase transition-colors ${selectedMetric === 'signal' ? 'bg-blue-500/20 text-blue-400' : 'opacity-40 hover:opacity-100'}`}>Signal</button>
+                        <button onClick={() => setSelectedMetric('traffic')} className={`px-2 py-1 rounded text-[9px] font-mono uppercase transition-colors ${selectedMetric === 'traffic' ? 'bg-emerald-500/20 text-emerald-400' : 'opacity-40 hover:opacity-100'}`}>Traffic</button>
+                        <button onClick={() => setSelectedMetric('bitrate')} className={`px-2 py-1 rounded text-[9px] font-mono uppercase transition-colors ${selectedMetric === 'bitrate' ? 'bg-amber-500/20 text-amber-400' : 'opacity-40 hover:opacity-100'}`}>Bitrate</button>
+                        <button onClick={() => setSelectedMetric('sockets')} className={`px-2 py-1 rounded text-[9px] font-mono uppercase transition-colors ${selectedMetric === 'sockets' ? 'bg-purple-500/20 text-purple-400' : 'opacity-40 hover:opacity-100'}`}>Sockets</button>
+                      </div>
                     </div>
-                    <div className="flex gap-2">
-                      <button onClick={() => setSelectedMetric('signal')} className={`px-2 py-1 rounded text-[9px] font-mono uppercase transition-colors ${selectedMetric === 'signal' ? 'bg-blue-500/20 text-blue-400' : 'opacity-40 hover:opacity-100'}`}>Signal</button>
-                      <button onClick={() => setSelectedMetric('traffic')} className={`px-2 py-1 rounded text-[9px] font-mono uppercase transition-colors ${selectedMetric === 'traffic' ? 'bg-emerald-500/20 text-emerald-400' : 'opacity-40 hover:opacity-100'}`}>Traffic</button>
-                      <button onClick={() => setSelectedMetric('bitrate')} className={`px-2 py-1 rounded text-[9px] font-mono uppercase transition-colors ${selectedMetric === 'bitrate' ? 'bg-amber-500/20 text-amber-400' : 'opacity-40 hover:opacity-100'}`}>Bitrate</button>
-                      <button onClick={() => setSelectedMetric('sockets')} className={`px-2 py-1 rounded text-[9px] font-mono uppercase transition-colors ${selectedMetric === 'sockets' ? 'bg-purple-500/20 text-purple-400' : 'opacity-40 hover:opacity-100'}`}>Sockets</button>
+                    <div className="flex-1 min-h-0">
+                      <MetricsDashboard status={status} selectedMetric={selectedMetric} onSelectMetric={setSelectedMetric} />
+                    </div>
+                  </div>
+
+                  {/* Terminal Dashboard */}
+                  <div className="flex-[3] min-h-0">
+                    <TerminalDashboard 
+                      logs={logs} 
+                      autoRefresh={autoRefresh} 
+                      onToggleRefresh={() => setAutoRefresh(!autoRefresh)} 
+                      onClear={clearLogs}
+                      showVisual={showVisualTerminal}
+                      onToggleVisual={() => setShowVisualTerminal(!showVisualTerminal)}
+                    />
+                  </div>
+                </>
+              )}
+
+              {activeTab === 'metrics' && (
+                <div className="flex-1 p-8 rounded-2xl bg-white/[0.02] border border-white/10 flex flex-col min-h-0">
+                  <div className="flex items-center justify-between mb-8">
+                    <div className="flex items-center gap-4">
+                      <h3 className="text-sm font-mono opacity-30 uppercase tracking-widest">Advanced Metrics Dashboard</h3>
+                      <span className="px-3 py-1 rounded-full bg-blue-500/10 text-blue-400 text-[10px] font-mono uppercase animate-pulse">High Precision Mode</span>
+                    </div>
+                    <div className="flex gap-3">
+                      <button onClick={() => setSelectedMetric('signal')} className={`px-4 py-2 rounded-xl text-xs font-mono uppercase transition-all ${selectedMetric === 'signal' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 'opacity-40 hover:opacity-100 border border-transparent'}`}>Signal Strength</button>
+                      <button onClick={() => setSelectedMetric('traffic')} className={`px-4 py-2 rounded-xl text-xs font-mono uppercase transition-all ${selectedMetric === 'traffic' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'opacity-40 hover:opacity-100 border border-transparent'}`}>Network Traffic</button>
+                      <button onClick={() => setSelectedMetric('bitrate')} className={`px-4 py-2 rounded-xl text-xs font-mono uppercase transition-all ${selectedMetric === 'bitrate' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : 'opacity-40 hover:opacity-100 border border-transparent'}`}>Link Bitrate</button>
+                      <button onClick={() => setSelectedMetric('sockets')} className={`px-4 py-2 rounded-xl text-xs font-mono uppercase transition-all ${selectedMetric === 'sockets' ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30' : 'opacity-40 hover:opacity-100 border border-transparent'}`}>Active Sockets</button>
                     </div>
                   </div>
                   <div className="flex-1 min-h-0">
                     <MetricsDashboard status={status} selectedMetric={selectedMetric} onSelectMetric={setSelectedMetric} />
                   </div>
-               </div>
+                </div>
+              )}
 
-               {/* Terminal Dashboard */}
-               <div className="flex-[3] min-h-0">
-                <TerminalDashboard 
-                  logs={logs} 
-                  autoRefresh={autoRefresh} 
-                  onToggleRefresh={() => setAutoRefresh(!autoRefresh)} 
-                  onClear={clearLogs}
-                  showVisual={showVisualTerminal}
-                  onToggleVisual={() => setShowVisualTerminal(!showVisualTerminal)}
-                />
-               </div>
+              {activeTab === 'telemetry' && (
+                <div className="flex-1 p-8 rounded-2xl bg-white/[0.02] border border-white/10 flex flex-col min-h-0 overflow-hidden">
+                  <div className="flex items-center justify-between mb-8">
+                    <div className="flex items-center gap-4">
+                      <h3 className="text-sm font-mono opacity-30 uppercase tracking-widest">Verbatim System Telemetry</h3>
+                      <span className="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] font-mono uppercase">Live Feed</span>
+                    </div>
+                  </div>
+                  <div className="flex-1 overflow-y-auto custom-scrollbar">
+                    <TelemetryDashboard status={status} />
+                  </div>
+                </div>
+              )}
+
+              {activeTab === 'forensics' && (
+                <div className="flex-1 p-8 rounded-2xl bg-white/[0.02] border border-white/10 flex flex-col min-h-0 overflow-hidden">
+                  <div className="flex items-center justify-between mb-8">
+                    <div className="flex items-center gap-4">
+                      <h3 className="text-sm font-mono opacity-30 uppercase tracking-widest">Network Forensic Suite</h3>
+                      <span className="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] font-mono uppercase">Passive Recon Mode</span>
+                    </div>
+                  </div>
+                  <div className="flex-1 overflow-hidden">
+                    <ForensicDashboard status={status} logs={logs} />
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
