@@ -53,12 +53,20 @@ const parseTraffic = (linkOutput: string): { rx: number; tx: number } => {
 // Check if we have passwordless sudo for the fix script
 const checkSudoPermissions = async () => {
   try {
+    // Check if script exists first
+    if (!fs.existsSync(FIX_SCRIPT)) {
+      console.warn(`⚠️ System integration missing: ${FIX_SCRIPT} not found.`);
+      sudoPromptDetected = true;
+      return;
+    }
     // -n means non-interactive (fail if password required)
     await execAsync(`sudo -n "${FIX_SCRIPT}" --check-only`, 2000);
+    sudoPromptDetected = false;
     console.log("✅ System integration verified: Passwordless sudo active.");
   } catch (e: any) {
-    console.warn("⚠️ System integration not detected. Sudo may prompt for password.");
-    console.warn(`   Diagnostic: ${e.message}`);
+    sudoPromptDetected = true;
+    console.warn("ℹ️ System integration pending: Sudo requires password or script missing.");
+    console.log("   This is normal if you haven't run 'bash setup-system.sh' yet.");
   }
 };
 
@@ -166,6 +174,36 @@ app.get("/api/status", async (req, res) => {
   } catch (error) {
     res.status(500).json({ error: String(error) });
   }
+});
+
+// API: Run System Setup
+app.post("/api/run-setup", async (req, res) => {
+  try {
+    const SETUP_SCRIPT = path.join(WORKSPACE_DIR, "setup-system.sh");
+    if (!fs.existsSync(SETUP_SCRIPT)) {
+      return res.status(404).json({ error: "setup-system.sh not found" });
+    }
+    
+    // We run this and expect the user to provide password in the terminal
+    // We don't wait for it to finish because it might hang on sudo prompt
+    const { exec } = await import("child_process");
+    exec(`bash "${SETUP_SCRIPT}"`, (error, stdout, stderr) => {
+      if (error) console.error(`Setup error: ${error.message}`);
+      console.log(`Setup output: ${stdout}`);
+      if (stderr) console.error(`Setup stderr: ${stderr}`);
+      checkSudoPermissions(); // Re-check after it finishes
+    });
+    
+    res.json({ message: "Setup started. Please check your terminal for sudo prompt." });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// API: Re-check Sudo Permissions
+app.post("/api/recheck-sudo", async (req, res) => {
+  await checkSudoPermissions();
+  res.json({ sudoPromptDetected });
 });
 
 // API: Prepare Bundle

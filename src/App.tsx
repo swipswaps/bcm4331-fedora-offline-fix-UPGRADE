@@ -574,11 +574,60 @@ export default function App() {
                     role="alert"
                   >
                     <ShieldAlert className="w-4 h-4 text-red-400 mt-0.5" aria-hidden="true" />
-                    <div className="flex-1">
-                      <span className="text-[10px] font-bold text-red-200 uppercase tracking-tight">Sudo Password Required</span>
+                    <div className="flex-1 space-y-1.5">
+                      <span className="text-[10px] font-bold text-red-200 uppercase tracking-tight">System Integration Required</span>
                       <p className="text-[9px] text-red-200/70 leading-relaxed">
-                        Waiting for password in terminal.
+                        The recovery script needs passwordless sudo to fix Wi-Fi automatically.
                       </p>
+                      <div className="flex items-center gap-3">
+                        <button 
+                          onClick={async () => {
+                            try {
+                              await fetch("/api/run-setup", { method: "POST" });
+                              // We don't wait for it to finish because it might hang on sudo prompt
+                              // but we can start polling for status
+                              const interval = setInterval(async () => {
+                                const res = await fetch("/api/status");
+                                const data = await res.json();
+                                if (!data.sudoPromptDetected) {
+                                  clearInterval(interval);
+                                }
+                              }, 2000);
+                            } catch (e) {
+                              console.error("Failed to run setup", e);
+                            }
+                          }}
+                          className="px-2 py-1 bg-red-500/30 hover:bg-red-500/50 border border-red-500/40 rounded text-[9px] text-red-100 font-bold uppercase transition-colors"
+                        >
+                          Run Setup
+                        </button>
+                        <div className="w-px h-3 bg-red-500/20" />
+                        <div className="flex items-center gap-2">
+                          <code className="px-1.5 py-0.5 bg-black/40 rounded text-[8px] font-mono text-red-300 border border-red-500/20">
+                            bash setup-system.sh
+                          </code>
+                          <button 
+                            onClick={() => navigator.clipboard.writeText('bash setup-system.sh')}
+                            className="text-[8px] text-red-400 hover:text-red-300 uppercase font-bold tracking-tighter"
+                          >
+                            Copy
+                          </button>
+                        </div>
+                        <div className="w-px h-3 bg-red-500/20" />
+                        <button 
+                          onClick={async () => {
+                            try {
+                              await fetch("/api/recheck-sudo", { method: "POST" });
+                              fetchStatus();
+                            } catch (e) {
+                              console.error("Failed to re-check sudo", e);
+                            }
+                          }}
+                          className="text-[8px] text-blue-400 hover:text-blue-300 uppercase font-bold tracking-widest"
+                        >
+                          Re-check
+                        </button>
+                      </div>
                     </div>
                   </motion.div>
                 )}
