@@ -98,7 +98,7 @@ app.post("/api/toggle-recovery", (req, res) => {
 app.post("/api/toggle-power-save", (req, res) => {
   const { enabled } = req.body;
   const flag = enabled ? "--power-save-on" : "--power-save-off";
-  exec(`sudo ${FIX_SCRIPT} ${flag}`, (error, stdout, stderr) => {
+  exec(`sudo FIX_WIFI_WORKSPACE=${WORKSPACE_DIR} ${FIX_SCRIPT} ${flag}`, (error, stdout, stderr) => {
     console.log("Power save toggle completed", { error, stdout, stderr });
   });
   res.json({ success: true, powerSave: enabled ? "on" : "off" });
@@ -109,7 +109,7 @@ app.post("/api/fix", (req, res) => {
   if (isFixing) return res.status(429).json({ error: "Fix already in progress" });
   
   isFixing = true;
-  exec(`sudo ${FIX_SCRIPT} --force`, (error, stdout, stderr) => {
+  exec(`sudo FIX_WIFI_WORKSPACE=${WORKSPACE_DIR} ${FIX_SCRIPT} --force`, (error, stdout, stderr) => {
     console.log("Manual fix completed", { error, stdout, stderr });
     isFixing = false;
   });

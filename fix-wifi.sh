@@ -13,7 +13,9 @@ if [[ $EUID -ne 0 ]]; then exec sudo "$0" "$@"; fi
 # -------------------------
 # SAFE PATH RESOLUTION
 # -------------------------
-WORKSPACE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# If FIX_WIFI_WORKSPACE is provided (e.g. from server.ts), use it.
+# Otherwise, default to the script's own directory.
+WORKSPACE_DIR="${FIX_WIFI_WORKSPACE:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 TRACE_LOG="$WORKSPACE_DIR/verbatim_handshake.log"
 MANIFEST_DB="$WORKSPACE_DIR/manifest.db"
 BUNDLE_DIR="$WORKSPACE_DIR/offline_bundle"
@@ -163,12 +165,18 @@ perform_recovery() {
         systemctl start NetworkManager
     fi
 
-    # 4. Disable Wi-Fi Power Management (Common cause for b43 drops)
-    echo "→ Disabling Wi-Fi power management..."
+    # 4. Ensure interface is MANAGED and UP
     IFACE=$(ls /sys/class/net 2>/dev/null | grep -E '^wl' | head -n1 || echo "")
     if [[ -n "$IFACE" ]]; then
+        echo "→ Ensuring $IFACE is managed by NetworkManager..."
+        timeout "$CMD_TIMEOUT_SHORT" nmcli device set "$IFACE" managed yes 2>/dev/null || true
+        
+        echo "→ Bringing interface $IFACE up..."
+        ip link set "$IFACE" up 2>/dev/null || true
+        
+        echo "→ Disabling Wi-Fi power management..."
         timeout "$CMD_TIMEOUT_SHORT" iw dev "$IFACE" set power_save off 2>/dev/null || true
-        log_milestone "POWER_SAVE_DISABLED"
+        log_milestone "INTERFACE_MANAGED_AND_UP"
     fi
 
     # 5. Firmware Injection (CRITICAL FOR OFFLINE)
