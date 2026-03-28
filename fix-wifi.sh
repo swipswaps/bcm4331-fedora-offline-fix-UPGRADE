@@ -133,22 +133,28 @@ format_report() {
 perform_recovery() {
     log_milestone "RECOVERY_EXECUTION_START"
 
-    # 1. Force Networking ON (Fixes "Enable Networking" unchecked)
-    echo "→ Enabling networking..."
-    if ! timeout "$CMD_TIMEOUT_SHORT" nmcli networking on 2>/dev/null; then
-        echo "→ WARNING: Failed to enable networking via nmcli. Continuing..."
-        log_milestone "NM_NETWORKING_ON_FAILED"
-    else
+# 1. Force Networking ON (Fixes "Enable Networking" unchecked)
+    echo "→ Restoring global networking states..."
+    
+    # Enable global networking
+    if timeout "$CMD_TIMEOUT_SHORT" nmcli networking on 2>/dev/null; then
         log_milestone "NM_NETWORKING_ON_SUCCESS"
+    else
+        log_milestone "NM_NETWORKING_ON_FAILED"
     fi
 
-    # 2. Unblock RFKill
-    echo "→ Unblocking Wi-Fi..."
-    if ! timeout "$CMD_TIMEOUT_SHORT" rfkill unblock wifi 2>/dev/null; then
-        echo "→ WARNING: Failed to unblock Wi-Fi via rfkill. Continuing..."
-        log_milestone "RFKILL_UNBLOCK_FAILED"
+    # Enable Wi-Fi radio specifically
+    if timeout "$CMD_TIMEOUT_SHORT" nmcli radio wifi on 2>/dev/null; then
+        log_milestone "NM_RADIO_WIFI_ON_SUCCESS"
     else
-        log_milestone "RFKILL_UNBLOCK_SUCCESS"
+        log_milestone "NM_RADIO_WIFI_ON_FAILED"
+    fi
+
+    # Unblock all radios
+    if timeout "$CMD_TIMEOUT_SHORT" rfkill unblock all 2>/dev/null; then
+        log_milestone "RFKILL_UNBLOCK_ALL_SUCCESS"
+    else
+        log_milestone "RFKILL_UNBLOCK_ALL_FAILED"
     fi
 
     # 3. Ensure NetworkManager is running

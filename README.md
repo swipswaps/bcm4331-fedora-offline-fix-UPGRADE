@@ -40,10 +40,17 @@ This tool interacts with system-level networking components. Ensure your Linux h
 4. **Configure Sudo (Recommended for Seamless UI)**:
    By default, the server will prompt for your sudo password in the terminal when a fix is triggered. To allow the web app to trigger fixes silently from the browser, add this to your `/etc/sudoers` (run `sudo visudo` to edit):
    ```text
-   # Replace $(whoami) with your actual username if not running this command directly
+   # Replace $(whoami) with your actual username (e.g., owner)
    $(whoami) ALL=(ALL) NOPASSWD: /usr/local/bin/fix-wifi, /usr/bin/iw, /usr/bin/nmcli, /usr/bin/rfkill
    ```
    *Note: If you prefer to type your password once, simply run `npm run dev` and the first time you click "Fix" in the UI, you can enter the password in the terminal where the server is running. Sudo will cache this for several minutes.*
+
+5. **Install System-Wide (Optional)**:
+   To make the recovery script available globally and ensure it survives updates:
+   ```bash
+   sudo cp fix-wifi.sh /usr/local/bin/fix-wifi
+   sudo restorecon -v /usr/local/bin/fix-wifi
+   ```
 
 ## 🏃 Running the Application
 
@@ -61,6 +68,36 @@ pip install pystray pillow requests
 
 # Run the tray bridge
 python3 tray_applet.py &
+```
+
+### 3. Setup Autonomous Watchdog (Systemd)
+To ensure the system fixes itself even if the dashboard isn't open:
+```bash
+# Create the service
+sudo tee /etc/systemd/system/fix-wifi.service << 'EOF'
+[Unit]
+Description=Broadcom Wi-Fi Recovery Task
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/fix-wifi --force
+EOF
+
+# Create the timer (runs every 5 minutes)
+sudo tee /etc/systemd/system/fix-wifi.timer << 'EOF'
+[Unit]
+Description=Run Wi-Fi Recovery every 5 minutes
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=5min
+
+[Install]
+WantedBy=timers.target
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now fix-wifi.timer
 ```
 
 ## 📂 Project Structure
