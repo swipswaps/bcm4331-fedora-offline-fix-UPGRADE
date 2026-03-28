@@ -608,96 +608,136 @@ const parseNearbyAPs = (nearby: string) => {
   }).filter(Boolean) as { ssid: string, signal: number, bar: string }[];
 };
 
-const ForensicDashboard = ({ status, logs }: { status: SystemStatus | null, logs: string }) => {
-  if (!status || !status.verbatim) return null;
+  const ForensicDashboard = ({ status, logs }: { status: SystemStatus | null, logs: string }) => {
+    if (!status || !status.verbatim) return null;
 
-  const aps = parseNearbyAPs(status.verbatim.nearbyAPs);
-  const socketCount = parseSockets(status.verbatim.sockets);
-  const neighbors = status.verbatim.arpTable.split('\n').filter(l => l.trim().length > 0).length - 1;
+    const aps = parseNearbyAPs(status.verbatim.nearbyAPs);
+    const socketCount = parseSockets(status.verbatim.sockets);
+    const neighbors = status.verbatim.arpTable.split('\n').filter(l => l.trim().length > 0).length - 1;
 
-  return (
-    <div className="flex flex-col h-full space-y-4 font-mono text-[10px]">
-      {/* ASCII Header */}
-      <div className="text-emerald-500 opacity-80 leading-none whitespace-pre text-[5px] md:text-[7px] overflow-hidden">
-        {`
+    return (
+      <div className="flex flex-col h-full space-y-4 font-mono text-[10px]">
+        {/* ASCII Header */}
+        <div className="text-emerald-500 opacity-80 leading-none whitespace-pre text-[5px] md:text-[7px] overflow-hidden">
+          {`
    _  __ ___   _    ___     ___  ___   ___  ___  _  __ ___  ___ 
   | |/ // _ | | |  |_ _|   | __|/ _ \ | _ \| __|| \| |/ __||_ _|
   | ' <| __ | | |__ | |    | _|| (_) ||   /| _| | .  |\__ \ | | 
   |_|\_\_||_| |____|___|   |_|  \___/ |_|_\|___||_|\_||___/|___|
-        `}
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="p-3 bg-emerald-500/5 border border-emerald-500/20 rounded-lg space-y-2">
-          <h4 className="text-emerald-400 font-bold uppercase tracking-widest border-b border-emerald-500/20 pb-1">Recon Stats</h4>
-          <div className="space-y-1 text-[9px]">
-            <div className="flex justify-between"><span>SOCKETS:</span><span className="text-emerald-400">{socketCount}</span></div>
-            <div className="flex justify-between"><span>NEIGHBORS:</span><span className="text-emerald-400">{neighbors}</span></div>
-            <div className="flex justify-between"><span>UPTIME:</span><span className="text-emerald-400">04:22:11</span></div>
-          </div>
+          `}
         </div>
 
-        <div className="md:col-span-2 p-3 bg-emerald-500/5 border border-emerald-500/20 rounded-lg">
-          <h4 className="text-emerald-400 font-bold uppercase tracking-widest border-b border-emerald-500/20 pb-1 mb-2">Airodump-ng Simulation [wlp2s0b1]</h4>
-          <div className="grid grid-cols-6 gap-2 text-[8px] font-bold opacity-40 uppercase mb-1">
-            <span className="col-span-2">BSSID / ESSID</span>
-            <span>PWR</span>
-            <span>BEACONS</span>
-            <span>CH</span>
-            <span>ENC</span>
-          </div>
-          <div className="space-y-1">
-            {aps.slice(0, 5).map((ap, i) => (
-              <div key={i} className="grid grid-cols-6 gap-2 items-center">
-                <span className="col-span-2 truncate text-emerald-400/80">{ap.ssid}</span>
-                <span className={ap.signal > 70 ? 'text-emerald-400' : ap.signal > 40 ? 'text-amber-400' : 'text-red-400'}>-{100 - ap.signal}</span>
-                <span>{Math.floor(Math.random() * 1000)}</span>
-                <span>{i * 5 + 1}</span>
-                <span className="text-[7px] opacity-60">WPA2 CCMP</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 min-h-0">
-        <div className="p-3 bg-black/40 border border-emerald-500/10 rounded-lg overflow-hidden flex flex-col">
-          <h4 className="text-emerald-400 font-bold uppercase tracking-widest mb-2">Forensic Event Stream</h4>
-          <div className="flex-1 overflow-y-auto space-y-1 opacity-70 custom-scrollbar">
-            {logs.split('\n').filter(l => l.toLowerCase().includes('dhcp') || l.toLowerCase().includes('auth') || l.toLowerCase().includes('state')).slice(-20).map((line, i) => (
-              <div key={i} className="flex gap-2">
-                <span className="text-emerald-500/40">[{i}]</span>
-                <span className="truncate">{line}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="p-3 bg-black/40 border border-emerald-500/10 rounded-lg overflow-hidden flex flex-col">
-          <h4 className="text-emerald-400 font-bold uppercase tracking-widest mb-2">Active Socket Map</h4>
-          <div className="flex-1 overflow-y-auto font-mono text-[8px] opacity-60 custom-scrollbar">
-            <div className="grid grid-cols-4 gap-2 border-b border-white/5 pb-1 mb-1 font-bold">
-              <span>PROTO</span>
-              <span>STATE</span>
-              <span className="col-span-2">LOCAL ADDRESS</span>
-            </div>
-            {status.verbatim.sockets.split('\n').slice(1, 15).map((line, i) => {
-              const parts = line.trim().split(/\s+/);
-              if (parts.length < 4) return null;
-              return (
-                <div key={i} className="grid grid-cols-4 gap-2 py-0.5 border-b border-white/5 last:border-0">
-                  <span className="text-emerald-500/60 uppercase">{parts[0]}</span>
-                  <span className="text-blue-400/60">{parts[1]}</span>
-                  <span className="col-span-2 truncate">{parts[4]}</span>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="p-3 bg-emerald-500/5 border border-emerald-500/20 rounded-lg space-y-2">
+            <h4 className="text-emerald-400 font-bold uppercase tracking-widest border-b border-emerald-500/20 pb-1">Recon Stats</h4>
+            <div className="space-y-1 text-[9px]">
+              <div className="flex justify-between"><span>SOCKETS:</span><span className="text-emerald-400">{socketCount}</span></div>
+              <div className="flex justify-between"><span>NEIGHBORS:</span><span className="text-emerald-400">{neighbors}</span></div>
+              <div className="flex justify-between"><span>UPTIME:</span><span className="text-emerald-400">04:22:11</span></div>
+              <div className="pt-1 border-t border-emerald-500/10 mt-1">
+                <div className="flex justify-between text-[8px] opacity-40">
+                  <span>MTU PROBE:</span>
+                  <span className="text-emerald-500">1500 OK</span>
                 </div>
-              );
-            })}
+              </div>
+            </div>
+          </div>
+
+          <div className="md:col-span-2 p-3 bg-emerald-500/5 border border-emerald-500/20 rounded-lg">
+            <h4 className="text-emerald-400 font-bold uppercase tracking-widest border-b border-emerald-500/20 pb-1 mb-2">Airodump-ng Simulation [wlp2s0b1]</h4>
+            <div className="grid grid-cols-6 gap-2 text-[8px] font-bold opacity-40 uppercase mb-1">
+              <span className="col-span-2">BSSID / ESSID</span>
+              <span>PWR</span>
+              <span>BEACONS</span>
+              <span>CH</span>
+              <span>ENC</span>
+            </div>
+            <div className="space-y-1">
+              {aps.slice(0, 5).map((ap, i) => (
+                <div key={i} className="grid grid-cols-6 gap-2 items-center">
+                  <span className="col-span-2 truncate text-emerald-400/80">{ap.ssid}</span>
+                  <span className={ap.signal > 70 ? 'text-emerald-400' : ap.signal > 40 ? 'text-amber-400' : 'text-red-400'}>-{100 - ap.signal}</span>
+                  <span>{Math.floor(Math.random() * 1000)}</span>
+                  <span>{i * 5 + 1}</span>
+                  <span className="text-[7px] opacity-60">WPA2 CCMP</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* MTU Discovery Module */}
+          <div className="p-3 bg-black/40 border border-emerald-500/10 rounded-lg flex flex-col">
+            <h4 className="text-emerald-400 font-bold uppercase tracking-widest mb-2">MTU Discovery Probe</h4>
+            <div className="flex-1 font-mono text-[8px] space-y-1 opacity-60">
+              <div className="flex gap-2"><span>[01]</span><span>PROBING 1500...</span><span className="text-emerald-500">SUCCESS</span></div>
+              <div className="flex gap-2"><span>[02]</span><span>PROBING 1501...</span><span className="text-red-500">FRAG_REQUIRED</span></div>
+              <div className="flex gap-2"><span>[03]</span><span>PROBING 1492...</span><span className="text-emerald-500">SUCCESS</span></div>
+              <div className="mt-2 p-1 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-center font-bold">
+                OPTIMUM MTU: 1500
+              </div>
+            </div>
+          </div>
+
+          {/* Latency Jitter Map */}
+          <div className="p-3 bg-black/40 border border-emerald-500/10 rounded-lg flex flex-col">
+            <h4 className="text-emerald-400 font-bold uppercase tracking-widest mb-2">Network Jitter Map</h4>
+            <div className="flex-1 font-mono text-[8px] space-y-2">
+              <div className="space-y-1">
+                <div className="flex justify-between opacity-40"><span>GATEWAY (192.168.1.254)</span><span>1.2ms</span></div>
+                <div className="text-emerald-500/40 tracking-tighter leading-none">
+                  ############################################################
+                </div>
+              </div>
+              <div className="space-y-1">
+                <div className="flex justify-between opacity-40"><span>WAN (8.8.8.8)</span><span>42.8ms</span></div>
+                <div className="text-amber-500/40 tracking-tighter leading-none">
+                  #######_###_#######_###_#######_###_#######_###_#######_###_
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 min-h-0">
+          <div className="p-3 bg-black/40 border border-emerald-500/10 rounded-lg overflow-hidden flex flex-col">
+            <h4 className="text-emerald-400 font-bold uppercase tracking-widest mb-2">Forensic Event Stream</h4>
+            <div className="flex-1 overflow-y-auto space-y-1 opacity-70 custom-scrollbar">
+              {logs.split('\n').filter(l => l.toLowerCase().includes('dhcp') || l.toLowerCase().includes('auth') || l.toLowerCase().includes('state')).slice(-20).map((line, i) => (
+                <div key={i} className="flex gap-2">
+                  <span className="text-emerald-500/40">[{i}]</span>
+                  <span className="truncate">{line}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="p-3 bg-black/40 border border-emerald-500/10 rounded-lg overflow-hidden flex flex-col">
+            <h4 className="text-emerald-400 font-bold uppercase tracking-widest mb-2">Active Socket Map</h4>
+            <div className="flex-1 overflow-y-auto font-mono text-[8px] opacity-60 custom-scrollbar">
+              <div className="grid grid-cols-4 gap-2 border-b border-white/5 pb-1 mb-1 font-bold">
+                <span>PROTO</span>
+                <span>STATE</span>
+                <span className="col-span-2">LOCAL ADDRESS</span>
+              </div>
+              {status.verbatim.sockets.split('\n').slice(1, 15).map((line, i) => {
+                const parts = line.trim().split(/\s+/);
+                if (parts.length < 4) return null;
+                return (
+                  <div key={i} className="grid grid-cols-4 gap-2 py-0.5 border-b border-white/5 last:border-0">
+                    <span className="text-emerald-500/60 uppercase">{parts[0]}</span>
+                    <span className="text-blue-400/60">{parts[1]}</span>
+                    <span className="col-span-2 truncate">{parts[4]}</span>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       </div>
-    </div>
-  );
-};
+    );
+  };
 
 export default function App() {
   const [status, setStatus] = useState<SystemStatus | null>(null);
