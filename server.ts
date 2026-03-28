@@ -36,7 +36,8 @@ let sudoPromptDetected = false;
 const checkSudoPermissions = async () => {
   try {
     // -n means non-interactive (fail if password required)
-    await execAsync(`sudo -n "${FIX_SCRIPT}" --force --check-only`, 1000);
+    // Use --check-only as first arg so script exits immediately
+    await execAsync(`sudo -n "${FIX_SCRIPT}" --check-only`, 1000);
   } catch (e) {
     // If it fails, we don't set a flag anymore, we just log it
     console.warn("⚠️ System integration not detected. Sudo may prompt for password.");
