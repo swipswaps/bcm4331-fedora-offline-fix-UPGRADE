@@ -255,7 +255,24 @@ const TerminalDashboard = ({ logs, autoRefresh, onToggleRefresh, onClear }: { lo
   );
 };
 
-const MetricsDashboard = ({ status, selectedMetric, onSelectMetric }: { status: SystemStatus | null, selectedMetric: 'signal' | 'traffic', onSelectMetric: (m: 'signal' | 'traffic') => void }) => {
+const parseWifiLink = (wifiLink: string) => {
+  const rxMatch = wifiLink.match(/rx bitrate: ([\d.]+) MBit\/s/);
+  const txMatch = wifiLink.match(/tx bitrate: ([\d.]+) MBit\/s/);
+  const signalMatch = wifiLink.match(/signal: (-?\d+) dBm/);
+  return {
+    rxBitrate: rxMatch ? parseFloat(rxMatch[1]) : null,
+    txBitrate: txMatch ? parseFloat(txMatch[1]) : null,
+    signal: signalMatch ? parseInt(signalMatch[1]) : null
+  };
+};
+
+const parseSockets = (sockets: string) => {
+  const lines = sockets.split('\n').filter(l => l.trim().length > 0);
+  // Subtract header if present
+  return Math.max(0, lines.length - 1);
+};
+
+const MetricsDashboard = ({ status, selectedMetric, onSelectMetric }: { status: SystemStatus | null, selectedMetric: 'signal' | 'traffic' | 'bitrate' | 'sockets', onSelectMetric: (m: 'signal' | 'traffic' | 'bitrate' | 'sockets') => void }) => {
   const [zoomState, setZoomState] = useState<{ left: string | number | null, right: string | number | null, refAreaLeft: string | number | null, refAreaRight: string | number | null } | null>(null);
 
   if (!status || !status.metricsHistory || status.metricsHistory.length === 0) {
@@ -267,12 +284,22 @@ const MetricsDashboard = ({ status, selectedMetric, onSelectMetric }: { status: 
     );
   }
 
-  const data = status.metricsHistory.map(m => ({
-    ...m,
-    time: new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-    rx_kb: (m.rx / 1024).toFixed(1),
-    tx_kb: (m.tx / 1024).toFixed(1)
-  }));
+  const data = status.metricsHistory.map(m => {
+    // Attempt to parse verbatim data if available for this timestamp
+    const verbatimData = status.verbatim?.wifiLink ? parseWifiLink(status.verbatim.wifiLink) : { rxBitrate: null, txBitrate: null, signal: null };
+    const socketCount = status.verbatim?.sockets ? parseSockets(status.verbatim.sockets) : 0;
+    
+    return {
+      ...m,
+      time: new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+      rx_kb: (m.rx / 1024).toFixed(1),
+      tx_kb: (m.tx / 1024).toFixed(1),
+      signal_v: verbatimData.signal !== null ? verbatimData.signal : m.signal,
+      rx_bitrate: verbatimData.rxBitrate,
+      tx_bitrate: verbatimData.txBitrate,
+      socket_count: socketCount
+    };
+  });
 
   const handleZoom = () => {
     if (!zoomState) return;
@@ -310,6 +337,18 @@ const MetricsDashboard = ({ status, selectedMetric, onSelectMetric }: { status: 
           >
             Network Traffic
           </button>
+          <button 
+            onClick={() => onSelectMetric('bitrate')}
+            className={`px-3 py-1.5 rounded-lg border text-[10px] font-mono uppercase transition-all ${selectedMetric === 'bitrate' ? 'bg-amber-500/10 border-amber-500/30 text-amber-400' : 'bg-white/5 border-white/10 opacity-40 hover:opacity-100'}`}
+          >
+            Link Bitrate
+          </button>
+          <button 
+            onClick={() => onSelectMetric('sockets')}
+            className={`px-3 py-1.5 rounded-lg border text-[10px] font-mono uppercase transition-all ${selectedMetric === 'sockets' ? 'bg-purple-500/10 border-purple-500/30 text-purple-400' : 'bg-white/5 border-white/10 opacity-40 hover:opacity-100'}`}
+          >
+            Active Sockets
+          </button>
         </div>
         {zoomState?.left && (
           <button 
@@ -346,7 +385,7 @@ const MetricsDashboard = ({ status, selectedMetric, onSelectMetric }: { status: 
                 domain={[zoomState?.left || 'auto', zoomState?.right || 'auto']}
                 allowDataOverflow
               />
-              <YAxis domain={[-100, 0]} stroke="#ffffff30" fontSize={10} tickLine={false} axisLine={false} />
+              <YAxis domain={['auto', 'auto']} stroke="#ffffff30" fontSize={10} tickLine={false} axisLine={false} />
               <Tooltip 
                 contentStyle={{ backgroundColor: '#151619', border: '1px solid #ffffff10', borderRadius: '8px', fontSize: '10px' }}
                 itemStyle={{ color: '#3b82f6' }}
@@ -357,7 +396,7 @@ const MetricsDashboard = ({ status, selectedMetric, onSelectMetric }: { status: 
               )}
               <Brush dataKey="time" height={20} stroke="#3b82f620" fill="#00000040" travellerWidth={10} />
             </AreaChart>
-          ) : (
+          ) : selectedMetric === 'traffic' ? (
             <LineChart 
               data={data}
               onMouseDown={(e) => e && setZoomState(prev => ({ ...prev, left: prev?.left ?? null, right: prev?.right ?? null, refAreaLeft: e.activeLabel ?? null, refAreaRight: null }))}
@@ -384,6 +423,61 @@ const MetricsDashboard = ({ status, selectedMetric, onSelectMetric }: { status: 
                 <ReferenceArea x1={zoomState.refAreaLeft} x2={zoomState.refAreaRight} {...({ fill: "#10b981", fillOpacity: 0.1 } as any)} />
               )}
               <Brush dataKey="time" height={20} stroke="#10b98120" fill="#00000040" travellerWidth={10} />
+            </LineChart>
+          ) : selectedMetric === 'bitrate' ? (
+            <LineChart 
+              data={data}
+              onMouseDown={(e) => e && setZoomState(prev => ({ ...prev, left: prev?.left ?? null, right: prev?.right ?? null, refAreaLeft: e.activeLabel ?? null, refAreaRight: null }))}
+              onMouseMove={(e) => zoomState?.refAreaLeft && e && setZoomState(prev => ({ ...prev!, refAreaRight: e.activeLabel ?? null }))}
+              onMouseUp={handleZoom}
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" vertical={false} />
+              <XAxis 
+                dataKey="time" 
+                stroke="#ffffff30" 
+                fontSize={10} 
+                tickLine={false} 
+                axisLine={false} 
+                domain={[zoomState?.left || 'auto', zoomState?.right || 'auto']}
+                allowDataOverflow
+              />
+              <YAxis stroke="#ffffff30" fontSize={10} tickLine={false} axisLine={false} />
+              <Tooltip 
+                contentStyle={{ backgroundColor: '#151619', border: '1px solid #ffffff10', borderRadius: '8px', fontSize: '10px' }}
+              />
+              <Line type="monotone" dataKey="rx_bitrate" name="RX Bitrate (MBit/s)" stroke="#f59e0b" strokeWidth={2} dot={false} animationDuration={300} />
+              <Line type="monotone" dataKey="tx_bitrate" name="TX Bitrate (MBit/s)" stroke="#ef4444" strokeWidth={2} dot={false} animationDuration={300} />
+              {zoomState?.refAreaLeft && zoomState?.refAreaRight && (
+                <ReferenceArea x1={zoomState.refAreaLeft} x2={zoomState.refAreaRight} {...({ fill: "#f59e0b", fillOpacity: 0.1 } as any)} />
+              )}
+              <Brush dataKey="time" height={20} stroke="#f59e0b20" fill="#00000040" travellerWidth={10} />
+            </LineChart>
+          ) : (
+            <LineChart 
+              data={data}
+              onMouseDown={(e) => e && setZoomState(prev => ({ ...prev, left: prev?.left ?? null, right: prev?.right ?? null, refAreaLeft: e.activeLabel ?? null, refAreaRight: null }))}
+              onMouseMove={(e) => zoomState?.refAreaLeft && e && setZoomState(prev => ({ ...prev!, refAreaRight: e.activeLabel ?? null }))}
+              onMouseUp={handleZoom}
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" vertical={false} />
+              <XAxis 
+                dataKey="time" 
+                stroke="#ffffff30" 
+                fontSize={10} 
+                tickLine={false} 
+                axisLine={false} 
+                domain={[zoomState?.left || 'auto', zoomState?.right || 'auto']}
+                allowDataOverflow
+              />
+              <YAxis stroke="#ffffff30" fontSize={10} tickLine={false} axisLine={false} />
+              <Tooltip 
+                contentStyle={{ backgroundColor: '#151619', border: '1px solid #ffffff10', borderRadius: '8px', fontSize: '10px' }}
+              />
+              <Line type="monotone" dataKey="socket_count" name="Active Sockets" stroke="#a855f7" strokeWidth={2} dot={false} animationDuration={300} />
+              {zoomState?.refAreaLeft && zoomState?.refAreaRight && (
+                <ReferenceArea x1={zoomState.refAreaLeft} x2={zoomState.refAreaRight} {...({ fill: "#a855f7", fillOpacity: 0.1 } as any)} />
+              )}
+              <Brush dataKey="time" height={20} stroke="#a855f720" fill="#00000040" travellerWidth={10} />
             </LineChart>
           )}
         </ResponsiveContainer>
@@ -445,12 +539,12 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [preparingBundle, setPreparingBundle] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(true);
-  const [isCompact, setIsCompact] = useState(true);
+  const [isCompact, setIsCompact] = useState(window.innerWidth < 1024);
   const [showLogs, setShowLogs] = useState(false);
   const [showRawLogs, setShowRawLogs] = useState(false);
   const [copied, setCopied] = useState(false);
   const [activeTab, setActiveTab] = useState<'status' | 'metrics' | 'telemetry'>('status');
-  const [selectedMetric, setSelectedMetric] = useState<'signal' | 'traffic'>('signal');
+  const [selectedMetric, setSelectedMetric] = useState<'signal' | 'traffic' | 'bitrate' | 'sockets'>('signal');
   
   const logEndRef = useRef<HTMLDivElement>(null);
 
@@ -550,6 +644,18 @@ export default function App() {
       setPreparingBundle(false);
     }
   };
+
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth >= 1024 && isCompact) {
+        setIsCompact(false);
+      } else if (window.innerWidth < 1024 && !isCompact) {
+        setIsCompact(true);
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [isCompact]);
 
   useEffect(() => {
     fetchStatus();
@@ -1017,6 +1123,8 @@ export default function App() {
                     <div className="flex gap-2">
                       <button onClick={() => setSelectedMetric('signal')} className={`px-2 py-1 rounded text-[9px] font-mono uppercase transition-colors ${selectedMetric === 'signal' ? 'bg-blue-500/20 text-blue-400' : 'opacity-40 hover:opacity-100'}`}>Signal</button>
                       <button onClick={() => setSelectedMetric('traffic')} className={`px-2 py-1 rounded text-[9px] font-mono uppercase transition-colors ${selectedMetric === 'traffic' ? 'bg-emerald-500/20 text-emerald-400' : 'opacity-40 hover:opacity-100'}`}>Traffic</button>
+                      <button onClick={() => setSelectedMetric('bitrate')} className={`px-2 py-1 rounded text-[9px] font-mono uppercase transition-colors ${selectedMetric === 'bitrate' ? 'bg-amber-500/20 text-amber-400' : 'opacity-40 hover:opacity-100'}`}>Bitrate</button>
+                      <button onClick={() => setSelectedMetric('sockets')} className={`px-2 py-1 rounded text-[9px] font-mono uppercase transition-colors ${selectedMetric === 'sockets' ? 'bg-purple-500/20 text-purple-400' : 'opacity-40 hover:opacity-100'}`}>Sockets</button>
                     </div>
                   </div>
                   <div className="flex-1 min-h-0">
