@@ -72,7 +72,7 @@ app.get("/api/status", async (req, res) => {
     const BUNDLE_DIR = path.join(WORKSPACE_DIR, "offline_bundle");
     const bundleReady = fs.existsSync(BUNDLE_DIR) && fs.readdirSync(BUNDLE_DIR).some(f => f.endsWith(".fw"));
     
-    const [connectivity, kernel, powerSave, networkingState, wifiState, nmLogs, kernelLogs, sockets, ipAddr, wifiLink, nearbyAPs] = await Promise.all([
+    const [connectivity, kernel, powerSave, networkingState, wifiState, nmLogs, kernelLogs, sockets, ipAddr, wifiLink, nearbyAPs, arpTable] = await Promise.all([
       execAsync("nmcli networking connectivity").then(r => r.stdout.trim()).catch(() => "unknown"),
       execAsync("uname -r").then(r => r.stdout.trim()).catch(() => "unknown"),
       execAsync("iw dev $(ls /sys/class/net | grep -E '^wl' | head -n1) get power_save 2>/dev/null").then(r => r.stdout.trim()).catch(() => "unknown"),
@@ -85,7 +85,8 @@ app.get("/api/status", async (req, res) => {
       // Real-time Network Telemetry
       execAsync("ip -4 -brief addr").then(r => r.stdout.trim()).catch(() => ""),
       execAsync("iw dev $(ls /sys/class/net | grep -E '^wl' | head -n1) link").then(r => r.stdout.trim()).catch(() => ""),
-      execAsync("nmcli -t -f SSID,SIGNAL,BARS device wifi list | head -n 5").then(r => r.stdout.trim()).catch(() => "")
+      execAsync("nmcli -t -f SSID,SIGNAL,BARS device wifi list | head -n 5").then(r => r.stdout.trim()).catch(() => ""),
+      execAsync("arp -a | head -n 10").then(r => r.stdout.trim()).catch(() => "")
     ]);
 
     const isHealthy = connectivity === "full" || connectivity === "limited";
@@ -157,7 +158,8 @@ app.get("/api/status", async (req, res) => {
         sockets,
         ipAddr,
         wifiLink,
-        nearbyAPs
+        nearbyAPs,
+        arpTable
       },
       timestamp: new Date().toISOString()
     });

@@ -56,6 +56,7 @@ interface SystemStatus {
     ipAddr: string;
     wifiLink: string;
     nearbyAPs: string;
+    arpTable: string;
   };
   timestamp: string;
 }
@@ -286,7 +287,7 @@ const MetricsDashboard = ({ status, selectedMetric, onSelectMetric }: { status: 
         </button>
       </div>
 
-      <div className="flex-1 bg-black/40 rounded-2xl border border-white/5 p-4 min-h-[200px]">
+      <div className="flex-1 bg-black/40 rounded-2xl border border-white/5 p-4 min-h-[150px]">
         <ResponsiveContainer width="100%" height="100%">
           {selectedMetric === 'signal' ? (
             <AreaChart data={data}>
@@ -335,6 +336,7 @@ const TelemetryDashboard = ({ status }: { status: SystemStatus | null }) => {
 
   const sections = [
     { title: 'Network Interfaces', content: status.verbatim.ipAddr },
+    { title: 'ARP Table (Network Neighbors)', content: status.verbatim.arpTable },
     { title: 'Wi-Fi Link Status', content: status.verbatim.wifiLink },
     { title: 'Active Sockets', content: status.verbatim.sockets },
     { title: 'Nearby Access Points', content: status.verbatim.nearbyAPs },
@@ -345,7 +347,7 @@ const TelemetryDashboard = ({ status }: { status: SystemStatus | null }) => {
 
   return (
     <div className="flex flex-col h-full space-y-4 overflow-hidden">
-      <div className="flex-1 overflow-y-auto space-y-4 pr-2 custom-scrollbar">
+      <div className="flex-1 overflow-y-auto space-y-4 pr-2 custom-scrollbar scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
         {sections.map((section, idx) => (
           <div key={idx} className="space-y-1.5">
             <div className="flex items-center justify-between">
@@ -488,8 +490,8 @@ export default function App() {
 
   useEffect(() => {
     if (!autoRefresh) return;
-    // Faster polling (1s) if fixing or degraded, slower (8s) if healthy
-    const intervalTime = (status?.isFixing || !status?.isHealthy) ? 1000 : 8000;
+    // Slow down polling to prevent network congestion (min 5s)
+    const intervalTime = (status?.isFixing || !status?.isHealthy) ? 5000 : 10000;
     const interval = setInterval(() => {
       fetchStatus();
       fetchLogs();
@@ -788,94 +790,108 @@ export default function App() {
             </button>
           </header>
 
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-            {/* Left: Toggles & Stats */}
-            <div className="lg:col-span-5 space-y-6">
-               {/* Reusing existing cards but with refined styling */}
-               <div className="p-8 rounded-3xl bg-white/[0.02] border border-white/10 space-y-8">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            {/* Row 1: Health & Metrics */}
+            <div className="lg:col-span-4 space-y-6">
+               {/* Health Card */}
+               <div className="p-6 rounded-2xl bg-white/[0.02] border border-white/10 space-y-6">
                   <div className="flex justify-between items-start">
                     <div>
-                      <p className="text-[10px] font-mono opacity-30 uppercase tracking-widest mb-2">Hardware Status</p>
+                      <p className="text-[10px] font-mono opacity-30 uppercase tracking-widest mb-1">System Health</p>
                       <div className="flex items-center gap-3">
                         <div className={`w-3 h-3 rounded-full ${status?.isHealthy ? 'bg-emerald-500' : 'bg-amber-500'} animate-pulse`} aria-hidden="true" />
-                        <span className="text-2xl font-medium" aria-live="polite">{status?.isHealthy ? 'Operational' : 'Degraded'}</span>
+                        <span className="text-xl font-medium" aria-live="polite">{status?.isHealthy ? 'Operational' : 'Degraded'}</span>
                       </div>
                     </div>
-                    <Activity className="w-6 h-6 opacity-20" aria-hidden="true" />
+                    <Activity className="w-5 h-5 opacity-20" aria-hidden="true" />
                   </div>
 
-                  {/* Sudo Warning (Full View) */}
-                  {status?.sudoPromptDetected && (
-                    <motion.div 
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="p-6 rounded-3xl bg-red-500/10 border border-red-500/20 flex items-start gap-4"
-                    >
-                      <ShieldAlert className="w-6 h-6 text-red-400 shrink-0" />
-                      <div className="space-y-1">
-                        <h4 className="text-sm font-semibold text-red-200 uppercase tracking-wider">Sudo Password Required</h4>
-                        <p className="text-xs text-red-200/60 leading-relaxed">
-                          The recovery process is paused. Please switch to your terminal and enter your password to allow the script to proceed.
-                        </p>
-                        <p className="text-[10px] font-mono text-red-400/80 pt-2">
-                          TIP: To avoid this, see the README section on "Passwordless Sudo".
-                        </p>
-                      </div>
-                    </motion.div>
-                  )}
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="p-4 rounded-2xl bg-black/40 border border-white/5">
-                      <p className="text-[9px] font-mono opacity-30 uppercase mb-2">Power Save</p>
-                      <button 
-                        onClick={togglePowerSave} 
-                        aria-label={`Toggle power save mode. Currently ${status?.powerSave || 'unknown'}`}
-                        className="flex items-center gap-2 group focus:outline-none focus:text-white"
-                      >
-                        {status?.powerSave?.includes("on") ? <Zap className="w-4 h-4 text-amber-400" /> : <ZapOff className="w-4 h-4 text-emerald-400" />}
-                        <span className="text-sm font-mono group-hover:underline">{status?.powerSave?.toUpperCase() || 'UNKNOWN'}</span>
-                      </button>
-                    </div>
-                    <div className="p-4 rounded-2xl bg-black/40 border border-white/5">
-                      <p className="text-[9px] font-mono opacity-30 uppercase mb-2">Radio Status</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="p-3 rounded-xl bg-black/40 border border-white/5">
+                      <p className="text-[8px] font-mono opacity-30 uppercase mb-1">Power</p>
                       <div className="flex items-center gap-2">
-                        <Circle className={`w-2 h-2 fill-current ${status?.wifiEnabled ? 'text-emerald-500' : 'text-amber-500'}`} aria-hidden="true" />
-                        <span className="text-sm font-mono uppercase">{status?.wifiEnabled ? 'Enabled' : 'Disabled'}</span>
+                        {status?.powerSave?.includes("on") ? <Zap className="w-3 h-3 text-amber-400" /> : <ZapOff className="w-3 h-3 text-emerald-400" />}
+                        <span className="text-[10px] font-mono uppercase">{status?.powerSave?.split(':')[1]?.trim() || 'OFF'}</span>
+                      </div>
+                    </div>
+                    <div className="p-3 rounded-xl bg-black/40 border border-white/5">
+                      <p className="text-[8px] font-mono opacity-30 uppercase mb-1">Radio</p>
+                      <div className="flex items-center gap-2">
+                        <Circle className={`w-1.5 h-1.5 fill-current ${status?.wifiEnabled ? 'text-emerald-500' : 'text-amber-500'}`} aria-hidden="true" />
+                        <span className="text-[10px] font-mono uppercase">{status?.wifiEnabled ? 'Enabled' : 'Disabled'}</span>
                       </div>
                     </div>
                   </div>
 
-                  <div className="space-y-4">
+                  <div className="space-y-3">
                     <button 
                       onClick={toggleRecovery} 
-                      aria-pressed={status?.recoveryEnabled}
-                      aria-label="Toggle autonomous recovery"
-                      className="w-full flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all focus:ring-2 focus:ring-blue-500 outline-none"
+                      className="w-full flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all"
                     >
-                      <div className="flex items-center gap-3">
-                        <Power className={`w-5 h-5 ${status?.recoveryEnabled ? 'text-blue-400' : 'opacity-20'}`} aria-hidden="true" />
-                        <span className="text-sm font-medium">Autonomous Recovery</span>
+                      <div className="flex items-center gap-2">
+                        <Power className={`w-4 h-4 ${status?.recoveryEnabled ? 'text-blue-400' : 'opacity-20'}`} />
+                        <span className="text-xs font-medium">Auto-Recovery</span>
                       </div>
-                      <div className={`w-10 h-5 rounded-full relative transition-colors ${status?.recoveryEnabled ? 'bg-blue-600' : 'bg-white/10'}`} aria-hidden="true">
-                        <motion.div animate={{ x: status?.recoveryEnabled ? 22 : 2 }} className="absolute top-1 w-3 h-3 bg-white rounded-full" />
+                      <div className={`w-8 h-4 rounded-full relative transition-colors ${status?.recoveryEnabled ? 'bg-blue-600' : 'bg-white/10'}`}>
+                        <motion.div animate={{ x: status?.recoveryEnabled ? 18 : 2 }} className="absolute top-0.5 w-3 h-3 bg-white rounded-full" />
                       </div>
                     </button>
 
                     <button 
                       onClick={triggerFix} 
                       disabled={loading || status?.isFixing} 
-                      aria-busy={loading || status?.isFixing}
-                      className="w-full p-6 rounded-2xl bg-white text-black font-semibold flex items-center justify-center gap-3 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50 shadow-xl shadow-white/5 focus:ring-4 focus:ring-white/20 outline-none"
+                      className="w-full p-4 rounded-xl bg-white text-black font-bold flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50"
                     >
-                      {loading || status?.isFixing ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Wifi className="w-5 h-5" aria-hidden="true" />}
-                      {status?.isFixing ? 'RECOVERY IN PROGRESS' : 'TRIGGER FORCED RECOVERY'}
+                      {loading || status?.isFixing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Wifi className="w-4 h-4" />}
+                      <span className="text-xs uppercase tracking-wider">{status?.isFixing ? 'Fixing...' : 'Force Recovery'}</span>
                     </button>
+                  </div>
+               </div>
+
+               {/* Sudo Warning (Full View) */}
+               {status?.sudoPromptDetected && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="p-4 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-start gap-3"
+                >
+                  <ShieldAlert className="w-5 h-5 text-red-400 shrink-0" />
+                  <div className="space-y-1">
+                    <h4 className="text-[10px] font-bold text-red-200 uppercase tracking-wider">Sudo Password Required</h4>
+                    <p className="text-[9px] text-red-200/60 leading-relaxed">
+                      Recovery paused. Enter password in terminal.
+                    </p>
+                  </div>
+                </motion.div>
+              )}
+            </div>
+
+            <div className="lg:col-span-8 h-[320px]">
+               <div className="h-full p-6 rounded-2xl bg-white/[0.02] border border-white/10 flex flex-col">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-[10px] font-mono opacity-30 uppercase tracking-widest">Network Telemetry</h3>
+                    <div className="flex gap-2">
+                      <button onClick={() => setSelectedMetric('signal')} className={`px-2 py-1 rounded text-[9px] font-mono uppercase ${selectedMetric === 'signal' ? 'bg-blue-500/20 text-blue-400' : 'opacity-40'}`}>Signal</button>
+                      <button onClick={() => setSelectedMetric('traffic')} className={`px-2 py-1 rounded text-[9px] font-mono uppercase ${selectedMetric === 'traffic' ? 'bg-emerald-500/20 text-emerald-400' : 'opacity-40'}`}>Traffic</button>
+                    </div>
+                  </div>
+                  <div className="flex-1">
+                    <MetricsDashboard status={status} selectedMetric={selectedMetric} onSelectMetric={setSelectedMetric} />
                   </div>
                </div>
             </div>
 
-            {/* Right: Logs */}
-            <div className="lg:col-span-7 flex flex-col h-[600px]">
+            {/* Row 2: Verbatim Telemetry & Terminal */}
+            <div className="lg:col-span-5 h-[450px]">
+               <div className="h-full p-6 rounded-2xl bg-white/[0.02] border border-white/10 flex flex-col">
+                  <h3 className="text-[10px] font-mono opacity-30 uppercase tracking-widest mb-4">Verbatim System Data</h3>
+                  <div className="flex-1 overflow-hidden">
+                    <TelemetryDashboard status={status} />
+                  </div>
+               </div>
+            </div>
+
+            <div className="lg:col-span-7 h-[450px]">
               <TerminalDashboard 
                 logs={logs} 
                 autoRefresh={autoRefresh} 
