@@ -22,6 +22,7 @@ import { motion, AnimatePresence } from "motion/react";
 interface SystemStatus {
   isHealthy: boolean;
   networkingEnabled: boolean;
+  wifiEnabled: boolean;
   recoveryEnabled: boolean;
   bundleReady: boolean;
   kernel: string;
@@ -166,7 +167,7 @@ export default function App() {
 
       {/* Status Summary */}
       <div className="p-4 space-y-4">
-        {!status?.networkingEnabled && status?.networkingEnabled !== undefined && (
+        {(!status?.networkingEnabled || !status?.wifiEnabled) && status?.networkingEnabled !== undefined && (
           <motion.div 
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -174,7 +175,9 @@ export default function App() {
           >
             <div className="flex items-center gap-2">
               <ShieldAlert className="w-4 h-4 text-amber-400" />
-              <span className="text-[10px] font-medium text-amber-200 uppercase">Networking Disabled</span>
+              <span className="text-[10px] font-medium text-amber-200 uppercase">
+                {!status.networkingEnabled ? 'Networking Disabled' : 'Wi-Fi Radio Disabled'}
+              </span>
             </div>
             <button 
               onClick={triggerFix}
@@ -330,8 +333,11 @@ export default function App() {
                       </button>
                     </div>
                     <div className="p-4 rounded-2xl bg-black/40 border border-white/5">
-                      <p className="text-[9px] font-mono opacity-30 uppercase mb-2">Kernel</p>
-                      <p className="text-sm font-mono truncate">{status?.kernel || '...'}</p>
+                      <p className="text-[9px] font-mono opacity-30 uppercase mb-2">Radio Status</p>
+                      <div className="flex items-center gap-2">
+                        <Circle className={`w-2 h-2 fill-current ${status?.wifiEnabled ? 'text-emerald-500' : 'text-amber-500'}`} />
+                        <span className="text-sm font-mono uppercase">{status?.wifiEnabled ? 'Enabled' : 'Disabled'}</span>
+                      </div>
                     </div>
                   </div>
 

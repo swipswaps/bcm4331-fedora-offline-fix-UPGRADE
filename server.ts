@@ -42,17 +42,19 @@ app.get("/api/status", async (req, res) => {
     const bundleReady = fs.existsSync(BUNDLE_DIR) && fs.readdirSync(BUNDLE_DIR).some(f => f.endsWith(".fw"));
     
     // Parallelize system calls with individual timeouts and error handling
-    const [connectivity, kernel, powerSave, networkingState] = await Promise.all([
+    const [connectivity, kernel, powerSave, networkingState, wifiState] = await Promise.all([
       execAsync("nmcli networking connectivity").then(r => r.stdout.trim()).catch(() => "unknown"),
       execAsync("uname -r").then(r => r.stdout.trim()).catch(() => "unknown"),
       execAsync("iw dev $(ls /sys/class/net | grep -E '^wl' | head -n1) get power_save 2>/dev/null").then(r => r.stdout.trim()).catch(() => "unknown"),
-      execAsync("nmcli networking").then(r => r.stdout.trim()).catch(() => "unknown")
+      execAsync("nmcli networking").then(r => r.stdout.trim()).catch(() => "unknown"),
+      execAsync("nmcli radio wifi").then(r => r.stdout.trim()).catch(() => "unknown")
     ]);
 
     const responseData = {
       recoveryEnabled,
       isHealthy: connectivity === "full" || connectivity === "limited",
       networkingEnabled: networkingState === "enabled",
+      wifiEnabled: wifiState === "enabled",
       bundleReady,
       kernel,
       powerSave,
