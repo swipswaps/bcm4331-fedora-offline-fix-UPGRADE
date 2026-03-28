@@ -1,6 +1,6 @@
 import express from "express";
 import { createServer as createViteServer } from "vite";
-import { exec } from "child_process";
+import { exec, spawn } from "child_process";
 import { promisify } from "util";
 import fs from "fs";
 import path from "path";
@@ -9,8 +9,6 @@ const execAsync = (cmd: string, timeout = 3000) => {
   return new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
     exec(cmd, { timeout }, (error, stdout, stderr) => {
       if (error) {
-        // If it's just a non-zero exit code, we might still want the output
-        // but for our purposes, we'll treat it as an error and let the caller handle it
         reject(error);
       } else {
         resolve({ stdout, stderr });
@@ -27,20 +25,20 @@ const LOG_FILE = path.join(WORKSPACE_DIR, "verbatim_handshake.log");
 const FIX_SCRIPT = fs.existsSync("/usr/local/bin/fix-wifi") 
   ? "/usr/local/bin/fix-wifi" 
   : path.join(WORKSPACE_DIR, "fix-wifi.sh");
-const BUNDLE_SCRIPT = path.join(WORKSPACE_DIR, "prepare-bundle.sh");
-const BUNDLE_DIR = path.join(WORKSPACE_DIR, "offline_bundle");
 
 app.use(express.json());
 
 let isFixing = false;
+let lastFixError: string | null = null;
+let sudoPromptDetected = false;
 
 // API: Get Unified System Status
 app.get("/api/status", async (req, res) => {
   try {
     const recoveryEnabled = !fs.existsSync(DISABLE_FLAG);
+    const BUNDLE_DIR = path.join(WORKSPACE_DIR, "offline_bundle");
     const bundleReady = fs.existsSync(BUNDLE_DIR) && fs.readdirSync(BUNDLE_DIR).some(f => f.endsWith(".fw"));
     
-    // Parallelize system calls with individual timeouts and error handling
     const [connectivity, kernel, powerSave, networkingState, wifiState] = await Promise.all([
       execAsync("nmcli networking connectivity").then(r => r.stdout.trim()).catch(() => "unknown"),
       execAsync("uname -r").then(r => r.stdout.trim()).catch(() => "unknown"),
@@ -50,9 +48,8 @@ app.get("/api/status", async (req, res) => {
     ]);
 
     const isHealthy = connectivity === "full" || connectivity === "limited";
-    console.log(`[${new Date().toISOString()}] STATUS: Healthy=${isHealthy} | Net=${networkingState} | WiFi=${wifiState} | PowerSave=${powerSave} | Kernel=${kernel}`);
-
-    const responseData = {
+    
+    res.json({
       recoveryEnabled,
       isHealthy,
       networkingEnabled: networkingState === "enabled",
@@ -61,47 +58,13 @@ app.get("/api/status", async (req, res) => {
       kernel,
       powerSave,
       isFixing,
+      lastFixError,
+      sudoPromptDetected,
       timestamp: new Date().toISOString()
-    };
-    
-    res.json(responseData);
-  } catch (error) {
-    console.error("Error in /api/status:", error);
-    res.status(500).json({ error: String(error) });
-  }
-});
-
-// API: Prepare Bundle
-app.post("/api/prepare-bundle", (req, res) => {
-  exec(`bash ${BUNDLE_SCRIPT}`, (error, stdout, stderr) => {
-    console.log("Bundle preparation completed", { error, stdout, stderr });
-  });
-  res.json({ message: "Bundle preparation initiated" });
-});
-
-// API: Toggle Recovery
-app.post("/api/toggle-recovery", (req, res) => {
-  const { enabled } = req.body;
-  try {
-    if (enabled) {
-      if (fs.existsSync(DISABLE_FLAG)) fs.unlinkSync(DISABLE_FLAG);
-    } else {
-      if (!fs.existsSync(DISABLE_FLAG)) fs.writeFileSync(DISABLE_FLAG, "disabled");
-    }
-    res.json({ success: true, recoveryEnabled: enabled });
+    });
   } catch (error) {
     res.status(500).json({ error: String(error) });
   }
-});
-
-// API: Toggle Power Save
-app.post("/api/toggle-power-save", (req, res) => {
-  const { enabled } = req.body;
-  const flag = enabled ? "--power-save-on" : "--power-save-off";
-  exec(`sudo FIX_WIFI_WORKSPACE=${WORKSPACE_DIR} ${FIX_SCRIPT} ${flag}`, (error, stdout, stderr) => {
-    console.log("Power save toggle completed", { error, stdout, stderr });
-  });
-  res.json({ success: true, powerSave: enabled ? "on" : "off" });
 });
 
 // API: Manual Fix
@@ -109,10 +72,40 @@ app.post("/api/fix", (req, res) => {
   if (isFixing) return res.status(429).json({ error: "Fix already in progress" });
   
   isFixing = true;
-  exec(`sudo FIX_WIFI_WORKSPACE=${WORKSPACE_DIR} ${FIX_SCRIPT} --force`, (error, stdout, stderr) => {
-    console.log("Manual fix completed", { error, stdout, stderr });
-    isFixing = false;
+  lastFixError = null;
+  sudoPromptDetected = false;
+
+  // Use sh -c to ensure environment variables are correctly passed through sudo
+  const command = `FIX_WIFI_WORKSPACE="${WORKSPACE_DIR}" "${FIX_SCRIPT}" --force`;
+  const child = spawn("sudo", ["sh", "-c", command]);
+
+  child.stdout.on("data", (data) => {
+    const output = data.toString();
+    // Log to server console for debugging
+    process.stdout.write(`[FIX STDOUT] ${output}`);
   });
+
+  child.stderr.on("data", (data) => {
+    const output = data.toString();
+    process.stderr.write(`[FIX STDERR] ${output}`);
+    
+    // Detect sudo password prompt
+    if (output.toLowerCase().includes("password for") || output.includes("[sudo]")) {
+      sudoPromptDetected = true;
+    }
+  });
+
+  child.on("close", (code) => {
+    isFixing = false;
+    if (code !== 0) {
+      lastFixError = `Exit code ${code}`;
+    } else {
+      lastFixError = null;
+      sudoPromptDetected = false;
+    }
+    console.log(`Manual fix process exited with code ${code}`);
+  });
+
   res.json({ message: "Recovery initiated" });
 });
 

@@ -31,6 +31,8 @@ interface SystemStatus {
   kernel: string;
   powerSave: string;
   isFixing: boolean;
+  lastFixError: string | null;
+  sudoPromptDetected: boolean;
   timestamp: string;
 }
 
@@ -120,12 +122,12 @@ export default function App() {
     setLoading(true);
     try {
       await fetch("/api/fix", { method: "POST" });
-      setTimeout(() => {
-        fetchStatus();
-        fetchLogs();
-        setLoading(false);
-      }, 2000);
+      // We don't clear loading here immediately, we let the status poll handle it
+      // but we do a quick refresh to show the "Fixing" state
+      setTimeout(fetchStatus, 500);
     } catch (e) {
+      console.error("Failed to trigger fix", e);
+    } finally {
       setLoading(false);
     }
   };
@@ -186,6 +188,31 @@ export default function App() {
 
       {/* Status Summary */}
       <div className="p-4 space-y-4">
+        {/* Sudo Warning */}
+        {status?.sudoPromptDetected && (
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="p-3 bg-red-500/20 border border-red-500/30 rounded-lg space-y-2"
+          >
+            <div className="flex items-center gap-2">
+              <ShieldAlert className="w-4 h-4 text-red-400" aria-hidden="true" />
+              <span className="text-[10px] font-bold text-red-200 uppercase tracking-tight">Sudo Password Required</span>
+            </div>
+            <p className="text-[9px] text-red-200/70 leading-relaxed">
+              The recovery script is waiting for a password in your terminal. 
+              Please check the terminal where you ran <code className="bg-black/40 px-1">npm run dev</code>.
+            </p>
+          </motion.div>
+        )}
+
+        {/* Error Message */}
+        {status?.lastFixError && !status.isFixing && (
+          <div className="p-2 bg-red-500/10 border border-red-500/20 rounded text-[9px] text-red-400 font-mono">
+            LAST ERROR: {status.lastFixError}
+          </div>
+        )}
+
         {(!status?.networkingEnabled || !status?.wifiEnabled) && status?.networkingEnabled !== undefined && (
           <motion.div 
             initial={{ opacity: 0, y: -10 }}
@@ -222,11 +249,23 @@ export default function App() {
             onClick={triggerFix}
             disabled={loading || status?.isFixing}
             aria-label="Refresh network status"
-            className="p-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition-all active:scale-95 focus:ring-2 focus:ring-blue-500 outline-none"
+            className="p-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition-all active:scale-95 focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-30"
           >
             <RefreshCw className={`w-4 h-4 ${loading || status?.isFixing ? 'animate-spin' : 'opacity-60'}`} />
           </button>
         </div>
+
+        {/* Progress Bar if Fixing */}
+        {status?.isFixing && (
+          <div className="h-1 w-full bg-white/5 rounded-full overflow-hidden">
+            <motion.div 
+              initial={{ x: "-100%" }}
+              animate={{ x: "100%" }}
+              transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }}
+              className="h-full w-1/3 bg-blue-500"
+            />
+          </div>
+        )}
 
         {/* Toggles */}
         <div className="space-y-1">
@@ -371,6 +410,26 @@ export default function App() {
                     </div>
                     <Activity className="w-6 h-6 opacity-20" aria-hidden="true" />
                   </div>
+
+                  {/* Sudo Warning (Full View) */}
+                  {status?.sudoPromptDetected && (
+                    <motion.div 
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="p-6 rounded-3xl bg-red-500/10 border border-red-500/20 flex items-start gap-4"
+                    >
+                      <ShieldAlert className="w-6 h-6 text-red-400 shrink-0" />
+                      <div className="space-y-1">
+                        <h4 className="text-sm font-semibold text-red-200 uppercase tracking-wider">Sudo Password Required</h4>
+                        <p className="text-xs text-red-200/60 leading-relaxed">
+                          The recovery process is paused. Please switch to your terminal and enter your password to allow the script to proceed.
+                        </p>
+                        <p className="text-[10px] font-mono text-red-400/80 pt-2">
+                          TIP: To avoid this, see the README section on "Passwordless Sudo".
+                        </p>
+                      </div>
+                    </motion.div>
+                  )}
 
                   <div className="grid grid-cols-2 gap-4">
                     <div className="p-4 rounded-2xl bg-black/40 border border-white/5">

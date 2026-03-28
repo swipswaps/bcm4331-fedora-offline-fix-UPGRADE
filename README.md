@@ -21,6 +21,19 @@ This tool interacts with system-level networking components. Ensure your Linux h
 
 ## 📦 Installation
 
+> [!CAUTION]
+> **CRITICAL STEP: Sudo Configuration**
+> The recovery scripts require root privileges. By default, `sudo` will prompt for a password in the terminal where you ran `npm run dev`.
+>
+> To allow the web dashboard to trigger the recovery script **silently** from the browser, you MUST allow the `owner` user to run the script as root without a password.
+>
+> 1. Run `sudo visudo`
+> 2. Add this line at the very end of the file:
+>    ```text
+>    owner ALL=(ALL) NOPASSWD: /usr/local/bin/fix-wifi
+>    ```
+> 3. Save and exit.
+
 1. **Clone the repository**:
    ```bash
    git clone <your-repo-url>
@@ -37,18 +50,11 @@ This tool interacts with system-level networking components. Ensure your Linux h
    chmod +x fix-wifi.sh prepare-bundle.sh
    ```
 
-4. **Configure Sudo (Recommended for Seamless UI)**:
-   By default, the server will prompt for your sudo password in the terminal when a fix is triggered. To allow the web app to trigger fixes silently from the browser, add this to your `/etc/sudoers` (run `sudo visudo` to edit):
-   ```text
-   # Replace $(whoami) with your actual username (e.g., owner)
-   $(whoami) ALL=(ALL) NOPASSWD: /usr/local/bin/fix-wifi, /usr/bin/iw, /usr/bin/nmcli, /usr/bin/rfkill
-   ```
-   *Note: If you prefer to type your password once, simply run `npm run dev` and the first time you click "Fix" in the UI, you can enter the password in the terminal where the server is running. Sudo will cache this for several minutes.*
-
-5. **Install System-Wide (Optional)**:
-   To make the recovery script available globally and ensure it survives updates:
+4. **Install System-Wide (REQUIRED for UI Fixes)**:
+   To make the recovery script available to the web app and ensure it survives updates:
    ```bash
    sudo cp fix-wifi.sh /usr/local/bin/fix-wifi
+   sudo chmod +x /usr/local/bin/fix-wifi
    sudo restorecon -v /usr/local/bin/fix-wifi
    ```
 

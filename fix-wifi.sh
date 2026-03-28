@@ -138,25 +138,36 @@ perform_recovery() {
 # 1. Force Networking ON (Fixes "Enable Networking" unchecked)
     echo "→ Restoring global networking states..."
     
-    # Enable global networking
-    if timeout "$CMD_TIMEOUT_SHORT" nmcli networking on 2>/dev/null; then
-        log_milestone "NM_NETWORKING_ON_SUCCESS"
-    else
-        log_milestone "NM_NETWORKING_ON_FAILED"
-    fi
+    # Unblock all radios FIRST
+    echo "→ Unblocking all radios..."
+    timeout "$CMD_TIMEOUT_LONG" rfkill unblock all 2>/dev/null || true
 
+    # Enable global networking with retries
+    local net_restored=0
+    for i in {1..3}; do
+        echo "→ Attempt $i: Enabling global networking..."
+        if timeout "$CMD_TIMEOUT_LONG" nmcli networking on 2>/dev/null; then
+            log_milestone "NM_NETWORKING_ON_SUCCESS"
+            net_restored=1
+            break
+        fi
+        sleep 1
+    done
+    [[ $net_restored -eq 0 ]] && log_milestone "NM_NETWORKING_ON_FAILED"
+
+    # Force a connectivity check
+    echo "→ Forcing connectivity check..."
+    timeout "$CMD_TIMEOUT_LONG" nmcli networking connectivity check 2>/dev/null || true
+
+    # Enable all radios
+    echo "→ Enabling all radios..."
+    timeout "$CMD_TIMEOUT_LONG" nmcli radio all on 2>/dev/null || true
+    
     # Enable Wi-Fi radio specifically
-    if timeout "$CMD_TIMEOUT_SHORT" nmcli radio wifi on 2>/dev/null; then
+    if timeout "$CMD_TIMEOUT_LONG" nmcli radio wifi on 2>/dev/null; then
         log_milestone "NM_RADIO_WIFI_ON_SUCCESS"
     else
         log_milestone "NM_RADIO_WIFI_ON_FAILED"
-    fi
-
-    # Unblock all radios
-    if timeout "$CMD_TIMEOUT_SHORT" rfkill unblock all 2>/dev/null; then
-        log_milestone "RFKILL_UNBLOCK_ALL_SUCCESS"
-    else
-        log_milestone "RFKILL_UNBLOCK_ALL_FAILED"
     fi
 
     # 3. Ensure NetworkManager is running
