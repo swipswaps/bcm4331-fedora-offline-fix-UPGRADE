@@ -15,7 +15,10 @@ import {
   ChevronDown,
   Circle,
   LayoutGrid,
-  Maximize2
+  Maximize2,
+  Copy,
+  ExternalLink,
+  Check
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -39,8 +42,20 @@ export default function App() {
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [isCompact, setIsCompact] = useState(true);
   const [showLogs, setShowLogs] = useState(false);
+  const [showRawLogs, setShowRawLogs] = useState(false);
+  const [copied, setCopied] = useState(false);
   
   const logEndRef = useRef<HTMLDivElement>(null);
+
+  const copyToClipboard = async () => {
+    try {
+      await navigator.clipboard.writeText(logs);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error("Failed to copy!", err);
+    }
+  };
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -151,16 +166,20 @@ export default function App() {
   }, [logs, showLogs]);
 
   const CompactView = () => (
-    <div className="w-[320px] bg-[#151619] rounded-xl overflow-hidden shadow-2xl border border-white/10">
+    <div className="w-[320px] bg-[#151619] rounded-xl overflow-hidden shadow-2xl border border-white/10 select-text" role="complementary" aria-label="Compact status view">
       {/* Header */}
       <div className="p-4 bg-black/40 border-b border-white/5 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className={`w-2 h-2 rounded-full ${status?.isHealthy ? 'bg-emerald-500' : 'bg-amber-500'} animate-pulse`} />
+          <div className={`w-2 h-2 rounded-full ${status?.isHealthy ? 'bg-emerald-500' : 'bg-amber-500'} animate-pulse`} aria-hidden="true" />
           <span className="text-[10px] font-mono uppercase tracking-widest opacity-60">Broadcom Kit</span>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => setIsCompact(false)} className="p-1 hover:bg-white/5 rounded transition-colors">
-            <Maximize2 className="w-3 h-3 opacity-40" />
+          <button 
+            onClick={() => setIsCompact(false)} 
+            aria-label="Expand to full dashboard"
+            className="p-1 hover:bg-white/5 rounded transition-colors focus:outline-none focus:ring-1 focus:ring-blue-500"
+          >
+            <Maximize2 className="w-3 h-3 opacity-40" aria-hidden="true" />
           </button>
         </div>
       </div>
@@ -172,16 +191,17 @@ export default function App() {
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             className="p-3 bg-amber-500/20 border border-amber-500/30 rounded-lg flex items-center justify-between gap-3"
+            role="alert"
           >
             <div className="flex items-center gap-2">
-              <ShieldAlert className="w-4 h-4 text-amber-400" />
+              <ShieldAlert className="w-4 h-4 text-amber-400" aria-hidden="true" />
               <span className="text-[10px] font-medium text-amber-200 uppercase">
                 {!status.networkingEnabled ? 'Networking Disabled' : 'Wi-Fi Radio Disabled'}
               </span>
             </div>
             <button 
               onClick={triggerFix}
-              className="px-2 py-1 bg-amber-500 text-black text-[9px] font-bold rounded uppercase hover:bg-amber-400 transition-colors"
+              className="px-2 py-1 bg-amber-500 text-black text-[9px] font-bold rounded uppercase hover:bg-amber-400 transition-colors focus:ring-2 focus:ring-white outline-none"
             >
               Enable Now
             </button>
@@ -190,7 +210,7 @@ export default function App() {
 
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${status?.isHealthy ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-400'}`}>
+            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${status?.isHealthy ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-400'}`} aria-hidden="true">
               {status?.isHealthy ? <Wifi className="w-5 h-5" /> : <WifiOff className="w-5 h-5" />}
             </div>
             <div>
@@ -201,7 +221,8 @@ export default function App() {
           <button 
             onClick={triggerFix}
             disabled={loading || status?.isFixing}
-            className="p-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition-all active:scale-95"
+            aria-label="Refresh network status"
+            className="p-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition-all active:scale-95 focus:ring-2 focus:ring-blue-500 outline-none"
           >
             <RefreshCw className={`w-4 h-4 ${loading || status?.isFixing ? 'animate-spin' : 'opacity-60'}`} />
           </button>
@@ -211,35 +232,49 @@ export default function App() {
         <div className="space-y-1">
           <div className="flex items-center justify-between p-2 rounded-lg hover:bg-white/[0.02] transition-colors">
             <div className="flex items-center gap-2">
-              <Power className={`w-3 h-3 ${status?.recoveryEnabled ? 'text-blue-400' : 'opacity-30'}`} />
+              <Power className={`w-3 h-3 ${status?.recoveryEnabled ? 'text-blue-400' : 'opacity-30'}`} aria-hidden="true" />
               <span className="text-[11px] opacity-70">Autonomous Recovery</span>
             </div>
-            <button onClick={toggleRecovery} className={`w-8 h-4 rounded-full relative transition-colors ${status?.recoveryEnabled ? 'bg-blue-600' : 'bg-white/10'}`}>
+            <button 
+              onClick={toggleRecovery} 
+              aria-pressed={status?.recoveryEnabled}
+              aria-label="Toggle autonomous recovery"
+              className={`w-8 h-4 rounded-full relative transition-colors focus:ring-2 focus:ring-blue-500 outline-none ${status?.recoveryEnabled ? 'bg-blue-600' : 'bg-white/10'}`}
+            >
               <motion.div animate={{ x: status?.recoveryEnabled ? 18 : 2 }} className="absolute top-0.5 w-3 h-3 bg-white rounded-full" />
             </button>
           </div>
 
           <div className="flex items-center justify-between p-2 rounded-lg hover:bg-white/[0.02] transition-colors">
             <div className="flex items-center gap-2">
-              <Zap className={`w-3 h-3 ${!status?.powerSave?.includes("on") ? 'text-emerald-400' : 'opacity-30'}`} />
+              <Zap className={`w-3 h-3 ${!status?.powerSave?.includes("on") ? 'text-emerald-400' : 'opacity-30'}`} aria-hidden="true" />
               <span className="text-[11px] opacity-70">Performance Mode</span>
             </div>
-            <button onClick={togglePowerSave} className={`w-8 h-4 rounded-full relative transition-colors ${!status?.powerSave?.includes("on") ? 'bg-emerald-600' : 'bg-white/10'}`}>
+            <button 
+              onClick={togglePowerSave} 
+              aria-pressed={!status?.powerSave?.includes("on")}
+              aria-label="Toggle performance mode"
+              className={`w-8 h-4 rounded-full relative transition-colors focus:ring-2 focus:ring-emerald-500 outline-none ${!status?.powerSave?.includes("on") ? 'bg-emerald-600' : 'bg-white/10'}`}
+            >
               <motion.div animate={{ x: !status?.powerSave?.includes("on") ? 18 : 2 }} className="absolute top-0.5 w-3 h-3 bg-white rounded-full" />
             </button>
           </div>
 
           <div className="flex items-center justify-between p-2 rounded-lg hover:bg-white/[0.02] transition-colors">
             <div className="flex items-center gap-2">
-              <ShieldCheck className={`w-3 h-3 ${status?.bundleReady ? 'text-emerald-400' : 'text-amber-400'}`} />
+              <ShieldCheck className={`w-3 h-3 ${status?.bundleReady ? 'text-emerald-400' : 'text-amber-400'}`} aria-hidden="true" />
               <span className="text-[11px] opacity-70">Offline Bundle</span>
             </div>
             {!status?.bundleReady ? (
-              <button onClick={prepareBundle} disabled={preparingBundle} className="text-[9px] font-mono text-blue-400 hover:underline">
+              <button 
+                onClick={prepareBundle} 
+                disabled={preparingBundle} 
+                className="text-[9px] font-mono text-blue-400 hover:underline focus:outline-none focus:text-blue-300"
+              >
                 {preparingBundle ? 'PREPARING...' : 'PREPARE'}
               </button>
             ) : (
-              <Circle className="w-2 h-2 fill-emerald-500 text-emerald-500" />
+              <Circle className="w-2 h-2 fill-emerald-500 text-emerald-500" aria-hidden="true" />
             )}
           </div>
         </div>
@@ -248,20 +283,32 @@ export default function App() {
         <div className="pt-2 border-t border-white/5">
           <button 
             onClick={() => setShowLogs(!showLogs)}
-            className="w-full flex items-center justify-between text-[10px] font-mono opacity-40 hover:opacity-100 transition-opacity"
+            aria-expanded={showLogs}
+            aria-controls="compact-telemetry"
+            className="w-full flex items-center justify-between text-[10px] font-mono opacity-40 hover:opacity-100 transition-opacity focus:outline-none focus:opacity-100"
           >
             <span>HANDSHAKE TELEMETRY</span>
-            {showLogs ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+            {showLogs ? <ChevronDown className="w-3 h-3" aria-hidden="true" /> : <ChevronRight className="w-3 h-3" aria-hidden="true" />}
           </button>
           
           <AnimatePresence>
             {showLogs && (
               <motion.div 
+                id="compact-telemetry"
                 initial={{ height: 0, opacity: 0 }}
                 animate={{ height: 120, opacity: 1 }}
                 exit={{ height: 0, opacity: 0 }}
                 className="mt-2 bg-black/40 rounded border border-white/5 overflow-y-auto p-2 font-mono text-[9px] text-blue-200/50"
               >
+                <div className="flex justify-end mb-1">
+                  <button 
+                    onClick={copyToClipboard}
+                    className="text-[8px] opacity-50 hover:opacity-100 flex items-center gap-1"
+                  >
+                    {copied ? <Check className="w-2 h-2" /> : <Copy className="w-2 h-2" />}
+                    {copied ? 'COPIED' : 'COPY'}
+                  </button>
+                </div>
                 <pre className="whitespace-pre-wrap">{logs || 'Waiting for events...'}</pre>
                 <div ref={logEndRef} />
               </motion.div>
@@ -272,8 +319,8 @@ export default function App() {
 
       {/* Footer */}
       <div className="px-4 py-2 bg-black/20 border-t border-white/5 flex justify-between items-center">
-        <span className="text-[8px] font-mono opacity-20 uppercase tracking-tighter">Broadcom Specialist Tool v38.2</span>
-        <div className="flex gap-1">
+        <span className="text-[8px] font-mono opacity-20 uppercase tracking-tighter">Broadcom Specialist Tool v38.6</span>
+        <div className="flex gap-1" aria-hidden="true">
           <div className="w-1 h-1 rounded-full bg-white/10" />
           <div className="w-1 h-1 rounded-full bg-white/10" />
           <div className="w-1 h-1 rounded-full bg-white/10" />
@@ -283,27 +330,28 @@ export default function App() {
   );
 
   return (
-    <div className="min-h-screen bg-[#0A0A0A] text-[#E0E0E0] font-sans selection:bg-blue-500/30 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-[#0A0A0A] text-[#E0E0E0] font-sans select-text flex items-center justify-center p-4">
       {isCompact ? (
         <CompactView />
       ) : (
-        <div className="max-w-5xl w-full space-y-8">
+        <div className="max-w-5xl w-full space-y-8" role="main">
           {/* Header */}
           <header className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 rounded-2xl bg-blue-600 flex items-center justify-center shadow-2xl shadow-blue-500/20">
-                <Wifi className="w-7 h-7 text-white" />
+                <Wifi className="w-7 h-7 text-white" aria-hidden="true" />
               </div>
               <div>
                 <h1 className="text-2xl font-semibold tracking-tight">Broadcom Control Center</h1>
-                <p className="text-xs font-mono opacity-40 uppercase tracking-[0.2em]">Hardware Recovery Suite v38.2</p>
+                <p className="text-xs font-mono opacity-40 uppercase tracking-[0.2em]">Hardware Recovery Suite v38.6</p>
               </div>
             </div>
             <button 
               onClick={() => setIsCompact(true)}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all"
+              aria-label="Switch to compact view"
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all focus:ring-2 focus:ring-blue-500 outline-none"
             >
-              <LayoutGrid className="w-4 h-4 opacity-60" />
+              <LayoutGrid className="w-4 h-4 opacity-60" aria-hidden="true" />
               <span className="text-xs font-medium">Compact Mode</span>
             </button>
           </header>
@@ -317,17 +365,21 @@ export default function App() {
                     <div>
                       <p className="text-[10px] font-mono opacity-30 uppercase tracking-widest mb-2">Hardware Status</p>
                       <div className="flex items-center gap-3">
-                        <div className={`w-3 h-3 rounded-full ${status?.isHealthy ? 'bg-emerald-500' : 'bg-amber-500'} animate-pulse`} />
-                        <span className="text-2xl font-medium">{status?.isHealthy ? 'Operational' : 'Degraded'}</span>
+                        <div className={`w-3 h-3 rounded-full ${status?.isHealthy ? 'bg-emerald-500' : 'bg-amber-500'} animate-pulse`} aria-hidden="true" />
+                        <span className="text-2xl font-medium" aria-live="polite">{status?.isHealthy ? 'Operational' : 'Degraded'}</span>
                       </div>
                     </div>
-                    <Activity className="w-6 h-6 opacity-20" />
+                    <Activity className="w-6 h-6 opacity-20" aria-hidden="true" />
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
                     <div className="p-4 rounded-2xl bg-black/40 border border-white/5">
                       <p className="text-[9px] font-mono opacity-30 uppercase mb-2">Power Save</p>
-                      <button onClick={togglePowerSave} className="flex items-center gap-2 group">
+                      <button 
+                        onClick={togglePowerSave} 
+                        aria-label={`Toggle power save mode. Currently ${status?.powerSave || 'unknown'}`}
+                        className="flex items-center gap-2 group focus:outline-none focus:text-white"
+                      >
                         {status?.powerSave?.includes("on") ? <Zap className="w-4 h-4 text-amber-400" /> : <ZapOff className="w-4 h-4 text-emerald-400" />}
                         <span className="text-sm font-mono group-hover:underline">{status?.powerSave?.toUpperCase() || 'UNKNOWN'}</span>
                       </button>
@@ -335,25 +387,35 @@ export default function App() {
                     <div className="p-4 rounded-2xl bg-black/40 border border-white/5">
                       <p className="text-[9px] font-mono opacity-30 uppercase mb-2">Radio Status</p>
                       <div className="flex items-center gap-2">
-                        <Circle className={`w-2 h-2 fill-current ${status?.wifiEnabled ? 'text-emerald-500' : 'text-amber-500'}`} />
+                        <Circle className={`w-2 h-2 fill-current ${status?.wifiEnabled ? 'text-emerald-500' : 'text-amber-500'}`} aria-hidden="true" />
                         <span className="text-sm font-mono uppercase">{status?.wifiEnabled ? 'Enabled' : 'Disabled'}</span>
                       </div>
                     </div>
                   </div>
 
                   <div className="space-y-4">
-                    <button onClick={toggleRecovery} className="w-full flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all">
+                    <button 
+                      onClick={toggleRecovery} 
+                      aria-pressed={status?.recoveryEnabled}
+                      aria-label="Toggle autonomous recovery"
+                      className="w-full flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all focus:ring-2 focus:ring-blue-500 outline-none"
+                    >
                       <div className="flex items-center gap-3">
-                        <Power className={`w-5 h-5 ${status?.recoveryEnabled ? 'text-blue-400' : 'opacity-20'}`} />
+                        <Power className={`w-5 h-5 ${status?.recoveryEnabled ? 'text-blue-400' : 'opacity-20'}`} aria-hidden="true" />
                         <span className="text-sm font-medium">Autonomous Recovery</span>
                       </div>
-                      <div className={`w-10 h-5 rounded-full relative transition-colors ${status?.recoveryEnabled ? 'bg-blue-600' : 'bg-white/10'}`}>
+                      <div className={`w-10 h-5 rounded-full relative transition-colors ${status?.recoveryEnabled ? 'bg-blue-600' : 'bg-white/10'}`} aria-hidden="true">
                         <motion.div animate={{ x: status?.recoveryEnabled ? 22 : 2 }} className="absolute top-1 w-3 h-3 bg-white rounded-full" />
                       </div>
                     </button>
 
-                    <button onClick={triggerFix} disabled={loading || status?.isFixing} className="w-full p-6 rounded-2xl bg-white text-black font-semibold flex items-center justify-center gap-3 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50 shadow-xl shadow-white/5">
-                      {loading || status?.isFixing ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Wifi className="w-5 h-5" />}
+                    <button 
+                      onClick={triggerFix} 
+                      disabled={loading || status?.isFixing} 
+                      aria-busy={loading || status?.isFixing}
+                      className="w-full p-6 rounded-2xl bg-white text-black font-semibold flex items-center justify-center gap-3 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50 shadow-xl shadow-white/5 focus:ring-4 focus:ring-white/20 outline-none"
+                    >
+                      {loading || status?.isFixing ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Wifi className="w-5 h-5" aria-hidden="true" />}
                       {status?.isFixing ? 'RECOVERY IN PROGRESS' : 'TRIGGER FORCED RECOVERY'}
                     </button>
                   </div>
@@ -364,19 +426,44 @@ export default function App() {
             <div className="lg:col-span-7 flex flex-col h-[600px]">
               <div className="flex items-center justify-between mb-4 px-2">
                 <div className="flex items-center gap-2 opacity-40">
-                  <Terminal className="w-4 h-4" />
+                  <Terminal className="w-4 h-4" aria-hidden="true" />
                   <span className="text-[10px] font-mono uppercase tracking-widest">Verbatim Handshake Log</span>
                 </div>
                 <div className="flex items-center gap-4">
-                  <button onClick={() => setAutoRefresh(!autoRefresh)} className="text-[10px] font-mono opacity-30 hover:opacity-100 transition-opacity">
-                    {autoRefresh ? 'PAUSE MONITORING' : 'RESUME MONITORING'}
+                  <button 
+                    onClick={copyToClipboard}
+                    className="text-[10px] font-mono opacity-30 hover:opacity-100 transition-opacity flex items-center gap-1"
+                  >
+                    {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                    {copied ? 'COPIED' : 'COPY'}
                   </button>
-                  <button onClick={fetchLogs} className="text-[10px] font-mono opacity-30 hover:opacity-100 transition-opacity">REFRESH</button>
+                  <button 
+                    onClick={() => setShowRawLogs(!showRawLogs)}
+                    className="text-[10px] font-mono opacity-30 hover:opacity-100 transition-opacity flex items-center gap-1"
+                  >
+                    <ExternalLink className="w-3 h-3" />
+                    {showRawLogs ? 'HIDE RAW' : 'VIEW RAW'}
+                  </button>
+                  <button onClick={() => setAutoRefresh(!autoRefresh)} className="text-[10px] font-mono opacity-30 hover:opacity-100 transition-opacity">
+                    {autoRefresh ? 'PAUSE' : 'RESUME'}
+                  </button>
                 </div>
               </div>
-              <div className="flex-1 rounded-3xl bg-black border border-white/10 p-6 font-mono text-xs text-blue-200/60 overflow-y-auto scrollbar-thin scrollbar-thumb-white/10">
-                <pre className="whitespace-pre-wrap">{logs || 'Initializing telemetry stream...'}</pre>
-                <div ref={logEndRef} />
+              
+              <div className="flex-1 rounded-3xl bg-black border border-white/10 overflow-hidden flex flex-col">
+                {showRawLogs ? (
+                  <textarea
+                    readOnly
+                    value={logs || 'No telemetry data available.'}
+                    className="flex-1 w-full bg-transparent p-6 font-mono text-xs text-blue-200/60 outline-none resize-none scrollbar-thin scrollbar-thumb-white/10"
+                    aria-label="Raw telemetry logs"
+                  />
+                ) : (
+                  <div className="flex-1 p-6 font-mono text-xs text-blue-200/60 overflow-y-auto scrollbar-thin scrollbar-thumb-white/10">
+                    <pre className="whitespace-pre-wrap">{logs || 'Initializing telemetry stream...'}</pre>
+                    <div ref={logEndRef} />
+                  </div>
+                )}
               </div>
             </div>
           </div>

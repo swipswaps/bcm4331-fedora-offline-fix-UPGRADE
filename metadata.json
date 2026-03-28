@@ -1,5 +1,5 @@
 {
-  "name": "Broadcom Wi-Fi Recovery Kit",
-  "description": "Broadcom Control Center: An interactive dashboard for deterministic Wi-Fi recovery, real-time telemetry, and user-controlled autonomous healing.",
+  "name": "Broadcom Wi-Fi Control Center",
+  "description": "A professional hardware recovery suite for Broadcom BCM4331 chipsets on Fedora, featuring real-time telemetry and autonomous healing.",
   "requestFramePermissions": []
 }
