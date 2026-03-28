@@ -34,7 +34,9 @@ import {
   Tooltip, 
   ResponsiveContainer,
   AreaChart,
-  Area
+  Area,
+  Brush,
+  ReferenceArea
 } from "recharts";
 
 interface SystemStatus {
@@ -254,6 +256,8 @@ const TerminalDashboard = ({ logs, autoRefresh, onToggleRefresh, onClear }: { lo
 };
 
 const MetricsDashboard = ({ status, selectedMetric, onSelectMetric }: { status: SystemStatus | null, selectedMetric: 'signal' | 'traffic', onSelectMetric: (m: 'signal' | 'traffic') => void }) => {
+  const [zoomState, setZoomState] = useState<{ left: string | number | null, right: string | number | null, refAreaLeft: string | number | null, refAreaRight: string | number | null } | null>(null);
+
   if (!status || !status.metricsHistory || status.metricsHistory.length === 0) {
     return (
       <div className="h-full flex flex-col items-center justify-center opacity-20 space-y-2">
@@ -270,27 +274,62 @@ const MetricsDashboard = ({ status, selectedMetric, onSelectMetric }: { status: 
     tx_kb: (m.tx / 1024).toFixed(1)
   }));
 
+  const handleZoom = () => {
+    if (!zoomState) return;
+    let { refAreaLeft, refAreaRight } = zoomState;
+
+    if (refAreaLeft === refAreaRight || refAreaRight === null) {
+      setZoomState(null);
+      return;
+    }
+
+    // xAxis domain zoom
+    if (refAreaLeft && refAreaRight) {
+      if (refAreaLeft > refAreaRight) [refAreaLeft, refAreaRight] = [refAreaRight, refAreaLeft];
+      setZoomState({ ...zoomState, left: refAreaLeft, right: refAreaRight, refAreaLeft: null, refAreaRight: null });
+    }
+  };
+
+  const resetZoom = () => {
+    setZoomState(null);
+  };
+
   return (
     <div className="flex flex-col h-full space-y-4">
-      <div className="flex gap-2">
-        <button 
-          onClick={() => onSelectMetric('signal')}
-          className={`px-3 py-1.5 rounded-lg border text-[10px] font-mono uppercase transition-all ${selectedMetric === 'signal' ? 'bg-blue-500/10 border-blue-500/30 text-blue-400' : 'bg-white/5 border-white/10 opacity-40 hover:opacity-100'}`}
-        >
-          Signal Strength
-        </button>
-        <button 
-          onClick={() => onSelectMetric('traffic')}
-          className={`px-3 py-1.5 rounded-lg border text-[10px] font-mono uppercase transition-all ${selectedMetric === 'traffic' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-white/5 border-white/10 opacity-40 hover:opacity-100'}`}
-        >
-          Network Traffic
-        </button>
+      <div className="flex items-center justify-between">
+        <div className="flex gap-2">
+          <button 
+            onClick={() => onSelectMetric('signal')}
+            className={`px-3 py-1.5 rounded-lg border text-[10px] font-mono uppercase transition-all ${selectedMetric === 'signal' ? 'bg-blue-500/10 border-blue-500/30 text-blue-400' : 'bg-white/5 border-white/10 opacity-40 hover:opacity-100'}`}
+          >
+            Signal Strength
+          </button>
+          <button 
+            onClick={() => onSelectMetric('traffic')}
+            className={`px-3 py-1.5 rounded-lg border text-[10px] font-mono uppercase transition-all ${selectedMetric === 'traffic' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-white/5 border-white/10 opacity-40 hover:opacity-100'}`}
+          >
+            Network Traffic
+          </button>
+        </div>
+        {zoomState?.left && (
+          <button 
+            onClick={resetZoom}
+            className="px-3 py-1.5 rounded-lg border border-white/10 bg-white/5 text-[10px] font-mono uppercase hover:bg-white/10 transition-all"
+          >
+            Reset Zoom
+          </button>
+        )}
       </div>
 
-      <div className="flex-1 bg-black/40 rounded-2xl border border-white/5 p-4 min-h-[150px]">
+      <div className="flex-1 bg-black/40 rounded-2xl border border-white/5 p-4 min-h-[150px] relative cursor-crosshair select-none">
         <ResponsiveContainer width="100%" height="100%">
           {selectedMetric === 'signal' ? (
-            <AreaChart data={data}>
+            <AreaChart 
+              data={data}
+              onMouseDown={(e) => e && setZoomState(prev => ({ ...prev, left: prev?.left ?? null, right: prev?.right ?? null, refAreaLeft: e.activeLabel ?? null, refAreaRight: null }))}
+              onMouseMove={(e) => zoomState?.refAreaLeft && e && setZoomState(prev => ({ ...prev!, refAreaRight: e.activeLabel ?? null }))}
+              onMouseUp={handleZoom}
+            >
               <defs>
                 <linearGradient id="colorSignal" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
@@ -298,24 +337,53 @@ const MetricsDashboard = ({ status, selectedMetric, onSelectMetric }: { status: 
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" vertical={false} />
-              <XAxis dataKey="time" stroke="#ffffff30" fontSize={10} tickLine={false} axisLine={false} />
+              <XAxis 
+                dataKey="time" 
+                stroke="#ffffff30" 
+                fontSize={10} 
+                tickLine={false} 
+                axisLine={false} 
+                domain={[zoomState?.left || 'auto', zoomState?.right || 'auto']}
+                allowDataOverflow
+              />
               <YAxis domain={[-100, 0]} stroke="#ffffff30" fontSize={10} tickLine={false} axisLine={false} />
               <Tooltip 
                 contentStyle={{ backgroundColor: '#151619', border: '1px solid #ffffff10', borderRadius: '8px', fontSize: '10px' }}
                 itemStyle={{ color: '#3b82f6' }}
               />
-              <Area type="monotone" dataKey="signal" stroke="#3b82f6" fillOpacity={1} fill="url(#colorSignal)" />
+              <Area type="monotone" dataKey="signal" stroke="#3b82f6" fillOpacity={1} fill="url(#colorSignal)" animationDuration={300} />
+              {zoomState?.refAreaLeft && zoomState?.refAreaRight && (
+                <ReferenceArea x1={zoomState.refAreaLeft} x2={zoomState.refAreaRight} {...({ fill: "#3b82f6", fillOpacity: 0.1 } as any)} />
+              )}
+              <Brush dataKey="time" height={20} stroke="#3b82f620" fill="#00000040" travellerWidth={10} />
             </AreaChart>
           ) : (
-            <LineChart data={data}>
+            <LineChart 
+              data={data}
+              onMouseDown={(e) => e && setZoomState(prev => ({ ...prev, left: prev?.left ?? null, right: prev?.right ?? null, refAreaLeft: e.activeLabel ?? null, refAreaRight: null }))}
+              onMouseMove={(e) => zoomState?.refAreaLeft && e && setZoomState(prev => ({ ...prev!, refAreaRight: e.activeLabel ?? null }))}
+              onMouseUp={handleZoom}
+            >
               <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" vertical={false} />
-              <XAxis dataKey="time" stroke="#ffffff30" fontSize={10} tickLine={false} axisLine={false} />
+              <XAxis 
+                dataKey="time" 
+                stroke="#ffffff30" 
+                fontSize={10} 
+                tickLine={false} 
+                axisLine={false} 
+                domain={[zoomState?.left || 'auto', zoomState?.right || 'auto']}
+                allowDataOverflow
+              />
               <YAxis stroke="#ffffff30" fontSize={10} tickLine={false} axisLine={false} />
               <Tooltip 
                 contentStyle={{ backgroundColor: '#151619', border: '1px solid #ffffff10', borderRadius: '8px', fontSize: '10px' }}
               />
-              <Line type="monotone" dataKey="rx_kb" name="RX (KB)" stroke="#10b981" strokeWidth={2} dot={false} />
-              <Line type="monotone" dataKey="tx_kb" name="TX (KB)" stroke="#3b82f6" strokeWidth={2} dot={false} />
+              <Line type="monotone" dataKey="rx_kb" name="RX (KB)" stroke="#10b981" strokeWidth={2} dot={false} animationDuration={300} />
+              <Line type="monotone" dataKey="tx_kb" name="TX (KB)" stroke="#3b82f6" strokeWidth={2} dot={false} animationDuration={300} />
+              {zoomState?.refAreaLeft && zoomState?.refAreaRight && (
+                <ReferenceArea x1={zoomState.refAreaLeft} x2={zoomState.refAreaRight} {...({ fill: "#10b981", fillOpacity: 0.1 } as any)} />
+              )}
+              <Brush dataKey="time" height={20} stroke="#10b98120" fill="#00000040" travellerWidth={10} />
             </LineChart>
           )}
         </ResponsiveContainer>
@@ -813,13 +881,15 @@ export default function App() {
   );
 
   return (
-    <div className="min-h-screen bg-[#0A0A0A] text-[#E0E0E0] font-sans select-text flex items-center justify-center p-4">
+    <div className="min-h-screen bg-[#0A0A0A] text-[#E0E0E0] font-sans select-text flex flex-col p-6">
       {isCompact ? (
-        <CompactView />
+        <div className="flex-1 flex items-center justify-center">
+          <CompactView />
+        </div>
       ) : (
-        <div className="max-w-5xl w-full space-y-8" role="main">
+        <div className="flex-1 flex flex-col space-y-6" role="main">
           {/* Header */}
-          <header className="flex items-center justify-between">
+          <header className="flex items-center justify-between shrink-0">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 rounded-2xl bg-blue-600 flex items-center justify-center shadow-2xl shadow-blue-500/20">
                 <Wifi className="w-7 h-7 text-white" aria-hidden="true" />
@@ -829,21 +899,33 @@ export default function App() {
                 <p className="text-xs font-mono opacity-40 uppercase tracking-[0.2em]">Hardware Recovery Suite v38.6</p>
               </div>
             </div>
-            <button 
-              onClick={() => setIsCompact(true)}
-              aria-label="Switch to compact view"
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all focus:ring-2 focus:ring-blue-500 outline-none"
-            >
-              <LayoutGrid className="w-4 h-4 opacity-60" aria-hidden="true" />
-              <span className="text-xs font-medium">Compact Mode</span>
-            </button>
+            <div className="flex items-center gap-3">
+              <div className="hidden md:flex items-center gap-6 mr-6 px-6 py-2 rounded-xl bg-white/[0.02] border border-white/5">
+                <div className="flex flex-col">
+                  <span className="text-[8px] font-mono opacity-30 uppercase tracking-widest">Uptime</span>
+                  <span className="text-[10px] font-mono text-blue-400">04:22:11</span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-[8px] font-mono opacity-30 uppercase tracking-widest">Load</span>
+                  <span className="text-[10px] font-mono text-emerald-400">0.42 / 0.38 / 0.41</span>
+                </div>
+              </div>
+              <button 
+                onClick={() => setIsCompact(true)}
+                aria-label="Switch to compact view"
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all focus:ring-2 focus:ring-blue-500 outline-none"
+              >
+                <LayoutGrid className="w-4 h-4 opacity-60" aria-hidden="true" />
+                <span className="text-xs font-medium">Compact Mode</span>
+              </button>
+            </div>
           </header>
 
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            {/* Row 1: Health & Metrics */}
-            <div className="lg:col-span-4 space-y-6">
+          <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 min-h-0">
+            {/* Left Column: Health & Controls */}
+            <div className="lg:col-span-3 flex flex-col gap-6 overflow-y-auto pr-1 custom-scrollbar">
                {/* Health Card */}
-               <div className="p-6 rounded-2xl bg-white/[0.02] border border-white/10 space-y-6">
+               <div className="p-6 rounded-2xl bg-white/[0.02] border border-white/10 space-y-6 shrink-0">
                   <div className="flex justify-between items-start">
                     <div>
                       <p className="text-[10px] font-mono opacity-30 uppercase tracking-widest mb-1">System Health</p>
@@ -902,7 +984,7 @@ export default function App() {
                 <motion.div 
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="p-4 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-start gap-3"
+                  className="p-4 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-start gap-3 shrink-0"
                 >
                   <ShieldAlert className="w-5 h-5 text-red-400 shrink-0" />
                   <div className="space-y-1">
@@ -913,40 +995,44 @@ export default function App() {
                   </div>
                 </motion.div>
               )}
+
+              {/* Verbatim System Data (Moved to sidebar for better space usage) */}
+              <div className="flex-1 min-h-[300px] p-6 rounded-2xl bg-white/[0.02] border border-white/10 flex flex-col">
+                <h3 className="text-[10px] font-mono opacity-30 uppercase tracking-widest mb-4">Verbatim System Data</h3>
+                <div className="flex-1 overflow-hidden">
+                  <TelemetryDashboard status={status} />
+                </div>
+              </div>
             </div>
 
-            <div className="lg:col-span-8 h-[320px]">
-               <div className="h-full p-6 rounded-2xl bg-white/[0.02] border border-white/10 flex flex-col">
+            {/* Right Column: Metrics & Terminal */}
+            <div className="lg:col-span-9 flex flex-col gap-6 min-h-0">
+               {/* Metrics Chart */}
+               <div className="flex-[2] p-6 rounded-2xl bg-white/[0.02] border border-white/10 flex flex-col min-h-0">
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-[10px] font-mono opacity-30 uppercase tracking-widest">Network Telemetry</h3>
+                    <div className="flex items-center gap-3">
+                      <h3 className="text-[10px] font-mono opacity-30 uppercase tracking-widest">Network Telemetry</h3>
+                      <span className="px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 text-[8px] font-mono uppercase animate-pulse">Live</span>
+                    </div>
                     <div className="flex gap-2">
-                      <button onClick={() => setSelectedMetric('signal')} className={`px-2 py-1 rounded text-[9px] font-mono uppercase ${selectedMetric === 'signal' ? 'bg-blue-500/20 text-blue-400' : 'opacity-40'}`}>Signal</button>
-                      <button onClick={() => setSelectedMetric('traffic')} className={`px-2 py-1 rounded text-[9px] font-mono uppercase ${selectedMetric === 'traffic' ? 'bg-emerald-500/20 text-emerald-400' : 'opacity-40'}`}>Traffic</button>
+                      <button onClick={() => setSelectedMetric('signal')} className={`px-2 py-1 rounded text-[9px] font-mono uppercase transition-colors ${selectedMetric === 'signal' ? 'bg-blue-500/20 text-blue-400' : 'opacity-40 hover:opacity-100'}`}>Signal</button>
+                      <button onClick={() => setSelectedMetric('traffic')} className={`px-2 py-1 rounded text-[9px] font-mono uppercase transition-colors ${selectedMetric === 'traffic' ? 'bg-emerald-500/20 text-emerald-400' : 'opacity-40 hover:opacity-100'}`}>Traffic</button>
                     </div>
                   </div>
-                  <div className="flex-1">
+                  <div className="flex-1 min-h-0">
                     <MetricsDashboard status={status} selectedMetric={selectedMetric} onSelectMetric={setSelectedMetric} />
                   </div>
                </div>
-            </div>
 
-            {/* Row 2: Verbatim Telemetry & Terminal */}
-            <div className="lg:col-span-5 h-[450px]">
-               <div className="h-full p-6 rounded-2xl bg-white/[0.02] border border-white/10 flex flex-col">
-                  <h3 className="text-[10px] font-mono opacity-30 uppercase tracking-widest mb-4">Verbatim System Data</h3>
-                  <div className="flex-1 overflow-hidden">
-                    <TelemetryDashboard status={status} />
-                  </div>
+               {/* Terminal Dashboard */}
+               <div className="flex-[3] min-h-0">
+                <TerminalDashboard 
+                  logs={logs} 
+                  autoRefresh={autoRefresh} 
+                  onToggleRefresh={() => setAutoRefresh(!autoRefresh)} 
+                  onClear={clearLogs}
+                />
                </div>
-            </div>
-
-            <div className="lg:col-span-7 h-[450px]">
-              <TerminalDashboard 
-                logs={logs} 
-                autoRefresh={autoRefresh} 
-                onToggleRefresh={() => setAutoRefresh(!autoRefresh)} 
-                onClear={clearLogs}
-              />
             </div>
           </div>
         </div>
