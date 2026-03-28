@@ -36,7 +36,6 @@ let isFixing = false;
 
 // API: Get Unified System Status
 app.get("/api/status", async (req, res) => {
-  console.log(`[${new Date().toISOString()}] GET /api/status`);
   try {
     const recoveryEnabled = !fs.existsSync(DISABLE_FLAG);
     const bundleReady = fs.existsSync(BUNDLE_DIR) && fs.readdirSync(BUNDLE_DIR).some(f => f.endsWith(".fw"));
@@ -50,9 +49,12 @@ app.get("/api/status", async (req, res) => {
       execAsync("nmcli radio wifi").then(r => r.stdout.trim()).catch(() => "unknown")
     ]);
 
+    const isHealthy = connectivity === "full" || connectivity === "limited";
+    console.log(`[${new Date().toISOString()}] GET /api/status -> Healthy: ${isHealthy}, Net: ${networkingState}, WiFi: ${wifiState}`);
+
     const responseData = {
       recoveryEnabled,
-      isHealthy: connectivity === "full" || connectivity === "limited",
+      isHealthy,
       networkingEnabled: networkingState === "enabled",
       wifiEnabled: wifiState === "enabled",
       bundleReady,
@@ -116,13 +118,15 @@ app.post("/api/fix", (req, res) => {
 
 // API: Get Logs
 app.get("/api/logs", async (req, res) => {
-  console.log(`[${new Date().toISOString()}] GET /api/logs`);
   try {
     if (!fs.existsSync(LOG_FILE)) {
+      console.log(`[${new Date().toISOString()}] GET /api/logs -> No logs found`);
       return res.json({ logs: "No logs found yet." });
     }
     // Efficiently get last 100 lines with timeout
     const { stdout } = await execAsync(`tail -n 100 ${LOG_FILE}`, 2000);
+    const lineCount = stdout.split("\n").filter(l => l.trim()).length;
+    console.log(`[${new Date().toISOString()}] GET /api/logs -> Returned ${lineCount} lines`);
     res.json({ logs: stdout });
   } catch (error) {
     console.error("Error in /api/logs:", error);
