@@ -387,28 +387,28 @@ const MetricsDashboard = ({ status, selectedMetric, onSelectMetric }: { status: 
   return (
     <div className="flex flex-col h-full space-y-4">
       <div className="flex items-center justify-between">
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button 
             onClick={() => onSelectMetric('signal')}
-            className={`px-3 py-1.5 rounded-lg border text-[10px] font-mono uppercase transition-all ${selectedMetric === 'signal' ? 'bg-blue-500/10 border-blue-500/30 text-blue-400' : 'bg-white/5 border-white/10 opacity-40 hover:opacity-100'}`}
+            className={`px-3 py-1.5 rounded-lg border text-[10px] font-mono uppercase transition-all duration-300 ${selectedMetric === 'signal' ? 'bg-blue-500/20 border-blue-500/50 text-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.2)]' : 'bg-white/5 border-white/10 opacity-40 hover:opacity-100 hover:bg-white/10'}`}
           >
             Signal Strength
           </button>
           <button 
             onClick={() => onSelectMetric('traffic')}
-            className={`px-3 py-1.5 rounded-lg border text-[10px] font-mono uppercase transition-all ${selectedMetric === 'traffic' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-white/5 border-white/10 opacity-40 hover:opacity-100'}`}
+            className={`px-3 py-1.5 rounded-lg border text-[10px] font-mono uppercase transition-all duration-300 ${selectedMetric === 'traffic' ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.2)]' : 'bg-white/5 border-white/10 opacity-40 hover:opacity-100 hover:bg-white/10'}`}
           >
             Network Traffic
           </button>
           <button 
             onClick={() => onSelectMetric('bitrate')}
-            className={`px-3 py-1.5 rounded-lg border text-[10px] font-mono uppercase transition-all ${selectedMetric === 'bitrate' ? 'bg-amber-500/10 border-amber-500/30 text-amber-400' : 'bg-white/5 border-white/10 opacity-40 hover:opacity-100'}`}
+            className={`px-3 py-1.5 rounded-lg border text-[10px] font-mono uppercase transition-all duration-300 ${selectedMetric === 'bitrate' ? 'bg-amber-500/20 border-amber-500/50 text-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.2)]' : 'bg-white/5 border-white/10 opacity-40 hover:opacity-100 hover:bg-white/10'}`}
           >
             Link Bitrate
           </button>
           <button 
             onClick={() => onSelectMetric('sockets')}
-            className={`px-3 py-1.5 rounded-lg border text-[10px] font-mono uppercase transition-all ${selectedMetric === 'sockets' ? 'bg-purple-500/10 border-purple-500/30 text-purple-400' : 'bg-white/5 border-white/10 opacity-40 hover:opacity-100'}`}
+            className={`px-3 py-1.5 rounded-lg border text-[10px] font-mono uppercase transition-all duration-300 ${selectedMetric === 'sockets' ? 'bg-purple-500/20 border-purple-500/50 text-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.2)]' : 'bg-white/5 border-white/10 opacity-40 hover:opacity-100 hover:bg-white/10'}`}
           >
             Active Sockets
           </button>
@@ -416,8 +416,9 @@ const MetricsDashboard = ({ status, selectedMetric, onSelectMetric }: { status: 
         {zoomState?.left && (
           <button 
             onClick={resetZoom}
-            className="px-3 py-1.5 rounded-lg border border-white/10 bg-white/5 text-[10px] font-mono uppercase hover:bg-white/10 transition-all"
+            className="px-3 py-1.5 rounded-lg border border-white/10 bg-white/5 text-[10px] font-mono uppercase hover:bg-white/10 transition-all flex items-center gap-2"
           >
+            <RefreshCw className="w-3 h-3 opacity-60" />
             Reset Zoom
           </button>
         )}
@@ -608,7 +609,7 @@ const parseNearbyAPs = (nearby: string) => {
   }).filter(Boolean) as { ssid: string, signal: number, bar: string }[];
 };
 
-  const ForensicDashboard = ({ status, logs }: { status: SystemStatus | null, logs: string }) => {
+  const ForensicDashboard = ({ status, logs, isCompact = false }: { status: SystemStatus | null, logs: string, isCompact?: boolean }) => {
     if (!status || !status.verbatim) return null;
 
     const aps = parseNearbyAPs(status.verbatim.nearbyAPs);
@@ -616,18 +617,20 @@ const parseNearbyAPs = (nearby: string) => {
     const neighbors = status.verbatim.arpTable.split('\n').filter(l => l.trim().length > 0).length - 1;
 
     return (
-      <div className="flex flex-col h-full space-y-4 font-mono text-[10px]">
-        {/* ASCII Header */}
-        <div className="text-emerald-500 opacity-80 leading-none whitespace-pre text-[5px] md:text-[7px] overflow-hidden">
-          {`
-   _  __ ___   _    ___     ___  ___   ___  ___  _  __ ___  ___ 
-  | |/ // _ | | |  |_ _|   | __|/ _ \ | _ \| __|| \| |/ __||_ _|
-  | ' <| __ | | |__ | |    | _|| (_) ||   /| _| | .  |\__ \ | | 
-  |_|\_\_||_| |____|___|   |_|  \___/ |_|_\|___||_|\_||___/|___|
-          `}
-        </div>
+      <div className={`flex flex-col h-full ${isCompact ? 'space-y-2' : 'space-y-4'} font-mono text-[10px]`}>
+        {/* ASCII Header - Hidden in compact mode */}
+        {!isCompact && (
+          <div className="text-emerald-500 opacity-80 leading-none whitespace-pre text-[5px] md:text-[7px] overflow-hidden">
+            {`
+     _  __ ___   _    ___     ___  ___   ___  ___  _  __ ___  ___ 
+    | |/ // _ | | |  |_ _|   | __|/ _ \ | _ \| __|| \| |/ __||_ _|
+    | ' <| __ | | |__ | |    | _|| (_) ||   /| _| | .  |\__ \ | | 
+    |_|\_\_||_| |____|___|   |_|  \___/ |_|_\|___||_|\_||___/|___|
+            `}
+          </div>
+        )}
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className={`grid grid-cols-1 ${isCompact ? '' : 'md:grid-cols-3'} gap-4`}>
           <div className="p-3 bg-emerald-500/5 border border-emerald-500/20 rounded-lg space-y-2">
             <h4 className="text-emerald-400 font-bold uppercase tracking-widest border-b border-emerald-500/20 pb-1">Recon Stats</h4>
             <div className="space-y-1 text-[9px]">
@@ -643,40 +646,49 @@ const parseNearbyAPs = (nearby: string) => {
             </div>
           </div>
 
-          <div className="md:col-span-2 p-3 bg-emerald-500/5 border border-emerald-500/20 rounded-lg">
+          <div className={`${isCompact ? '' : 'md:col-span-2'} p-3 bg-emerald-500/5 border border-emerald-500/20 rounded-lg`}>
             <h4 className="text-emerald-400 font-bold uppercase tracking-widest border-b border-emerald-500/20 pb-1 mb-2">Airodump-ng Simulation [wlp2s0b1]</h4>
             <div className="grid grid-cols-6 gap-2 text-[8px] font-bold opacity-40 uppercase mb-1">
               <span className="col-span-2">BSSID / ESSID</span>
               <span>PWR</span>
-              <span>BEACONS</span>
+              {!isCompact && <span>BEACONS</span>}
               <span>CH</span>
-              <span>ENC</span>
+              {!isCompact && <span>ENC</span>}
             </div>
             <div className="space-y-1">
-              {aps.slice(0, 5).map((ap, i) => (
+              {aps.slice(0, isCompact ? 3 : 5).map((ap, i) => (
                 <div key={i} className="grid grid-cols-6 gap-2 items-center">
                   <span className="col-span-2 truncate text-emerald-400/80">{ap.ssid}</span>
                   <span className={ap.signal > 70 ? 'text-emerald-400' : ap.signal > 40 ? 'text-amber-400' : 'text-red-400'}>-{100 - ap.signal}</span>
-                  <span>{Math.floor(Math.random() * 1000)}</span>
+                  {!isCompact && <span>{Math.floor(Math.random() * 1000)}</span>}
                   <span>{i * 5 + 1}</span>
-                  <span className="text-[7px] opacity-60">WPA2 CCMP</span>
+                  {!isCompact && <span className="text-[7px] opacity-60">WPA2 CCMP</span>}
                 </div>
               ))}
             </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className={`grid grid-cols-1 ${isCompact ? '' : 'md:grid-cols-2'} gap-4`}>
           {/* MTU Discovery Module */}
           <div className="p-3 bg-black/40 border border-emerald-500/10 rounded-lg flex flex-col">
             <h4 className="text-emerald-400 font-bold uppercase tracking-widest mb-2">MTU Discovery Probe</h4>
             <div className="flex-1 font-mono text-[8px] space-y-1 opacity-60">
-              <div className="flex gap-2"><span>[01]</span><span>PROBING 1500...</span><span className="text-emerald-500">SUCCESS</span></div>
-              <div className="flex gap-2"><span>[02]</span><span>PROBING 1501...</span><span className="text-red-500">FRAG_REQUIRED</span></div>
-              <div className="flex gap-2"><span>[03]</span><span>PROBING 1492...</span><span className="text-emerald-500">SUCCESS</span></div>
-              <div className="mt-2 p-1 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-center font-bold">
-                OPTIMUM MTU: 1500
-              </div>
+              {isCompact ? (
+                <div className="flex justify-between items-center">
+                  <span>PROBING 1500...</span>
+                  <span className="text-emerald-500 font-bold">OPTIMUM: 1500</span>
+                </div>
+              ) : (
+                <>
+                  <div className="flex gap-2"><span>[01]</span><span>PROBING 1500...</span><span className="text-emerald-500">SUCCESS</span></div>
+                  <div className="flex gap-2"><span>[02]</span><span>PROBING 1501...</span><span className="text-red-500">FRAG_REQUIRED</span></div>
+                  <div className="flex gap-2"><span>[03]</span><span>PROBING 1492...</span><span className="text-emerald-500">SUCCESS</span></div>
+                  <div className="mt-2 p-1 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-center font-bold">
+                    OPTIMUM MTU: 1500
+                  </div>
+                </>
+              )}
             </div>
           </div>
 
@@ -685,56 +697,60 @@ const parseNearbyAPs = (nearby: string) => {
             <h4 className="text-emerald-400 font-bold uppercase tracking-widest mb-2">Network Jitter Map</h4>
             <div className="flex-1 font-mono text-[8px] space-y-2">
               <div className="space-y-1">
-                <div className="flex justify-between opacity-40"><span>GATEWAY (192.168.1.254)</span><span>1.2ms</span></div>
-                <div className="text-emerald-500/40 tracking-tighter leading-none">
+                <div className="flex justify-between opacity-40"><span>GATEWAY</span><span>1.2ms</span></div>
+                <div className="text-emerald-500/40 tracking-tighter leading-none truncate">
                   ############################################################
                 </div>
               </div>
-              <div className="space-y-1">
-                <div className="flex justify-between opacity-40"><span>WAN (8.8.8.8)</span><span>42.8ms</span></div>
-                <div className="text-amber-500/40 tracking-tighter leading-none">
-                  #######_###_#######_###_#######_###_#######_###_#######_###_
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 min-h-0">
-          <div className="p-3 bg-black/40 border border-emerald-500/10 rounded-lg overflow-hidden flex flex-col">
-            <h4 className="text-emerald-400 font-bold uppercase tracking-widest mb-2">Forensic Event Stream</h4>
-            <div className="flex-1 overflow-y-auto space-y-1 opacity-70 custom-scrollbar">
-              {logs.split('\n').filter(l => l.toLowerCase().includes('dhcp') || l.toLowerCase().includes('auth') || l.toLowerCase().includes('state')).slice(-20).map((line, i) => (
-                <div key={i} className="flex gap-2">
-                  <span className="text-emerald-500/40">[{i}]</span>
-                  <span className="truncate">{line}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="p-3 bg-black/40 border border-emerald-500/10 rounded-lg overflow-hidden flex flex-col">
-            <h4 className="text-emerald-400 font-bold uppercase tracking-widest mb-2">Active Socket Map</h4>
-            <div className="flex-1 overflow-y-auto font-mono text-[8px] opacity-60 custom-scrollbar">
-              <div className="grid grid-cols-4 gap-2 border-b border-white/5 pb-1 mb-1 font-bold">
-                <span>PROTO</span>
-                <span>STATE</span>
-                <span className="col-span-2">LOCAL ADDRESS</span>
-              </div>
-              {status.verbatim.sockets.split('\n').slice(1, 15).map((line, i) => {
-                const parts = line.trim().split(/\s+/);
-                if (parts.length < 4) return null;
-                return (
-                  <div key={i} className="grid grid-cols-4 gap-2 py-0.5 border-b border-white/5 last:border-0">
-                    <span className="text-emerald-500/60 uppercase">{parts[0]}</span>
-                    <span className="text-blue-400/60">{parts[1]}</span>
-                    <span className="col-span-2 truncate">{parts[4]}</span>
+              {!isCompact && (
+                <div className="space-y-1">
+                  <div className="flex justify-between opacity-40"><span>WAN (8.8.8.8)</span><span>42.8ms</span></div>
+                  <div className="text-amber-500/40 tracking-tighter leading-none truncate">
+                    #######_###_#######_###_#######_###_#######_###_#######_###_
                   </div>
-                );
-              })}
+                </div>
+              )}
             </div>
           </div>
         </div>
+
+        {!isCompact && (
+          <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 min-h-0">
+            <div className="p-3 bg-black/40 border border-emerald-500/10 rounded-lg overflow-hidden flex flex-col">
+              <h4 className="text-emerald-400 font-bold uppercase tracking-widest mb-2">Forensic Event Stream</h4>
+              <div className="flex-1 overflow-y-auto space-y-1 opacity-70 custom-scrollbar">
+                {logs.split('\n').filter(l => l.toLowerCase().includes('dhcp') || l.toLowerCase().includes('auth') || l.toLowerCase().includes('state')).slice(-20).map((line, i) => (
+                  <div key={i} className="flex gap-2">
+                    <span className="text-emerald-500/40">[{i}]</span>
+                    <span className="truncate">{line}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="p-3 bg-black/40 border border-emerald-500/10 rounded-lg overflow-hidden flex flex-col">
+              <h4 className="text-emerald-400 font-bold uppercase tracking-widest mb-2">Active Socket Map</h4>
+              <div className="flex-1 overflow-y-auto font-mono text-[8px] opacity-60 custom-scrollbar">
+                <div className="grid grid-cols-4 gap-2 border-b border-white/5 pb-1 mb-1 font-bold">
+                  <span>PROTO</span>
+                  <span>STATE</span>
+                  <span className="col-span-2">LOCAL ADDRESS</span>
+                </div>
+                {status.verbatim.sockets.split('\n').slice(1, 15).map((line, i) => {
+                  const parts = line.trim().split(/\s+/);
+                  if (parts.length < 4) return null;
+                  return (
+                    <div key={i} className="grid grid-cols-4 gap-2 py-0.5 border-b border-white/5 last:border-0">
+                      <span className="text-emerald-500/60 uppercase">{parts[0]}</span>
+                      <span className="text-blue-400/60">{parts[1]}</span>
+                      <span className="col-span-2 truncate">{parts[4]}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   };
@@ -1153,8 +1169,8 @@ export default function App() {
             <TelemetryDashboard status={status} />
           </div>
         ) : (
-          <div className="h-[350px]">
-            <ForensicDashboard status={status} logs={logs} />
+          <div className="h-[350px] overflow-y-auto custom-scrollbar pr-1">
+            <ForensicDashboard status={status} logs={logs} isCompact={true} />
           </div>
         )}
 
@@ -1323,10 +1339,15 @@ export default function App() {
                     <button 
                       onClick={triggerFix} 
                       disabled={loading || status?.isFixing} 
-                      className="w-full p-4 rounded-xl bg-white text-black font-bold flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50"
+                      className={`w-full p-4 rounded-xl font-bold flex flex-col items-center justify-center gap-1 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50 ${!status?.isHealthy && !status?.isFixing ? 'bg-blue-600 text-white shadow-[0_0_25px_rgba(37,99,235,0.4)] ring-2 ring-blue-400/50' : 'bg-white text-black'}`}
                     >
-                      {loading || status?.isFixing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Wifi className="w-4 h-4" />}
-                      <span className="text-xs uppercase tracking-wider">{status?.isFixing ? 'Fixing...' : 'Force Recovery'}</span>
+                      <div className="flex items-center gap-2">
+                        {loading || status?.isFixing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Wifi className="w-4 h-4" />}
+                        <span className="text-xs uppercase tracking-wider">{status?.isFixing ? 'Fixing...' : 'Force Recovery'}</span>
+                      </div>
+                      {!status?.isHealthy && !status?.isFixing && (
+                        <span className="text-[8px] uppercase tracking-[0.2em] opacity-80 animate-pulse">Recommended Action</span>
+                      )}
                     </button>
                   </div>
                </div>
@@ -1382,12 +1403,6 @@ export default function App() {
                         <h3 className="text-[10px] font-mono opacity-30 uppercase tracking-widest">Network Telemetry</h3>
                         <span className="px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 text-[8px] font-mono uppercase animate-pulse">Live</span>
                       </div>
-                      <div className="flex gap-2">
-                        <button onClick={() => setSelectedMetric('signal')} className={`px-2 py-1 rounded text-[9px] font-mono uppercase transition-colors ${selectedMetric === 'signal' ? 'bg-blue-500/20 text-blue-400' : 'opacity-40 hover:opacity-100'}`}>Signal</button>
-                        <button onClick={() => setSelectedMetric('traffic')} className={`px-2 py-1 rounded text-[9px] font-mono uppercase transition-colors ${selectedMetric === 'traffic' ? 'bg-emerald-500/20 text-emerald-400' : 'opacity-40 hover:opacity-100'}`}>Traffic</button>
-                        <button onClick={() => setSelectedMetric('bitrate')} className={`px-2 py-1 rounded text-[9px] font-mono uppercase transition-colors ${selectedMetric === 'bitrate' ? 'bg-amber-500/20 text-amber-400' : 'opacity-40 hover:opacity-100'}`}>Bitrate</button>
-                        <button onClick={() => setSelectedMetric('sockets')} className={`px-2 py-1 rounded text-[9px] font-mono uppercase transition-colors ${selectedMetric === 'sockets' ? 'bg-purple-500/20 text-purple-400' : 'opacity-40 hover:opacity-100'}`}>Sockets</button>
-                      </div>
                     </div>
                     <div className="flex-1 min-h-0">
                       <MetricsDashboard status={status} selectedMetric={selectedMetric} onSelectMetric={setSelectedMetric} />
@@ -1414,12 +1429,6 @@ export default function App() {
                     <div className="flex items-center gap-4">
                       <h3 className="text-sm font-mono opacity-30 uppercase tracking-widest">Advanced Metrics Dashboard</h3>
                       <span className="px-3 py-1 rounded-full bg-blue-500/10 text-blue-400 text-[10px] font-mono uppercase animate-pulse">High Precision Mode</span>
-                    </div>
-                    <div className="flex gap-3">
-                      <button onClick={() => setSelectedMetric('signal')} className={`px-4 py-2 rounded-xl text-xs font-mono uppercase transition-all ${selectedMetric === 'signal' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 'opacity-40 hover:opacity-100 border border-transparent'}`}>Signal Strength</button>
-                      <button onClick={() => setSelectedMetric('traffic')} className={`px-4 py-2 rounded-xl text-xs font-mono uppercase transition-all ${selectedMetric === 'traffic' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'opacity-40 hover:opacity-100 border border-transparent'}`}>Network Traffic</button>
-                      <button onClick={() => setSelectedMetric('bitrate')} className={`px-4 py-2 rounded-xl text-xs font-mono uppercase transition-all ${selectedMetric === 'bitrate' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : 'opacity-40 hover:opacity-100 border border-transparent'}`}>Link Bitrate</button>
-                      <button onClick={() => setSelectedMetric('sockets')} className={`px-4 py-2 rounded-xl text-xs font-mono uppercase transition-all ${selectedMetric === 'sockets' ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30' : 'opacity-40 hover:opacity-100 border border-transparent'}`}>Active Sockets</button>
                     </div>
                   </div>
                   <div className="flex-1 min-h-0">
