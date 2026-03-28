@@ -65,6 +65,12 @@ app.get("/api/status", async (req, res) => {
 
     const isHealthy = connectivity === "full" || connectivity === "limited";
     
+    // Restore detailed terminal logging for the user
+    const healthIcon = isHealthy ? "✅" : "⚠️";
+    const wifiIcon = wifiState === "enabled" ? "📶" : "❌";
+    const netIcon = networkingState === "enabled" ? "🌐" : "🚫";
+    console.log(`[${new Date().toLocaleTimeString()}] STATUS: Health:${healthIcon} | Wi-Fi:${wifiIcon} | Net:${netIcon} | Sudo:${sudoPromptDetected ? "🔓" : "🔒"}`);
+
     res.json({
       recoveryEnabled,
       isHealthy,

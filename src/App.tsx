@@ -188,49 +188,55 @@ export default function App() {
 
       {/* Status Summary */}
       <div className="p-4 space-y-4">
-        {/* Fixed-height Slot for Banners to prevent jumping */}
-        <div className="min-h-[64px] flex flex-col justify-center">
-          {/* Sudo Warning */}
-          {status?.sudoPromptDetected && (
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.98 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="p-3 bg-red-500/20 border border-red-500/30 rounded-lg flex items-start gap-3"
-              role="alert"
-            >
-              <ShieldAlert className="w-4 h-4 text-red-400 mt-0.5" aria-hidden="true" />
-              <div className="flex-1">
-                <span className="text-[10px] font-bold text-red-200 uppercase tracking-tight">Sudo Password Required</span>
-                <p className="text-[9px] text-red-200/70 leading-relaxed">
-                  Waiting for password in terminal.
-                </p>
-              </div>
-            </motion.div>
-          )}
-
-          {/* Enable Now Banner */}
-          {(!status?.networkingEnabled || !status?.wifiEnabled) && status?.networkingEnabled !== undefined && !status?.isFixing && !status?.sudoPromptDetected && (
-            <motion.div 
-              initial={{ opacity: 0, y: -5 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="p-3 bg-amber-500/20 border border-amber-500/30 rounded-lg flex items-center justify-between gap-3"
-              role="alert"
-            >
-              <div className="flex items-center gap-2">
-                <ShieldAlert className="w-4 h-4 text-amber-400" aria-hidden="true" />
-                <span className="text-[10px] font-medium text-amber-200 uppercase">
-                  {!status.networkingEnabled ? 'Networking Disabled' : 'Wi-Fi Radio Disabled'}
-                </span>
-              </div>
-              <button 
-                onClick={triggerFix}
-                className="px-2 py-1 bg-amber-500 text-black text-[9px] font-bold rounded uppercase hover:bg-amber-400 transition-colors"
+        {/* Dynamic Slot for Banners - Collapses when empty but animates to prevent jumping */}
+        <motion.div 
+          initial={false}
+          animate={{ height: (status?.sudoPromptDetected || ((!status?.networkingEnabled || !status?.wifiEnabled) && status?.networkingEnabled !== undefined && !status?.isFixing)) ? "auto" : 0 }}
+          className="overflow-hidden"
+        >
+          <div className="pb-4 space-y-3">
+            {/* Sudo Warning */}
+            {status?.sudoPromptDetected && (
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="p-3 bg-red-500/20 border border-red-500/30 rounded-lg flex items-start gap-3"
+                role="alert"
               >
-                Enable
-              </button>
-            </motion.div>
-          )}
-        </div>
+                <ShieldAlert className="w-4 h-4 text-red-400 mt-0.5" aria-hidden="true" />
+                <div className="flex-1">
+                  <span className="text-[10px] font-bold text-red-200 uppercase tracking-tight">Sudo Password Required</span>
+                  <p className="text-[9px] text-red-200/70 leading-relaxed">
+                    Waiting for password in terminal.
+                  </p>
+                </div>
+              </motion.div>
+            )}
+
+            {/* Enable Now Banner */}
+            {(!status?.networkingEnabled || !status?.wifiEnabled) && status?.networkingEnabled !== undefined && !status?.isFixing && !status?.sudoPromptDetected && (
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="p-3 bg-amber-500/20 border border-amber-500/30 rounded-lg flex items-center justify-between gap-3"
+                role="alert"
+              >
+                <div className="flex items-center gap-2">
+                  <ShieldAlert className="w-4 h-4 text-amber-400" aria-hidden="true" />
+                  <span className="text-[10px] font-medium text-amber-200 uppercase">
+                    {!status.networkingEnabled ? 'Networking Disabled' : 'Wi-Fi Radio Disabled'}
+                  </span>
+                </div>
+                <button 
+                  onClick={triggerFix}
+                  className="px-2 py-1 bg-amber-500 text-black text-[9px] font-bold rounded uppercase hover:bg-amber-400 transition-colors"
+                >
+                  Enable
+                </button>
+              </motion.div>
+            )}
+          </div>
+        </motion.div>
 
         {/* Network Health Card */}
         <div className="flex items-center justify-between bg-white/5 p-3 rounded-xl border border-white/5">
