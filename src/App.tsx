@@ -153,7 +153,8 @@ export default function App() {
 
   useEffect(() => {
     if (!autoRefresh) return;
-    const intervalTime = (status?.isFixing || !status?.isHealthy) ? 2000 : 8000;
+    // Faster polling (1s) if fixing or degraded, slower (8s) if healthy
+    const intervalTime = (status?.isFixing || !status?.isHealthy) ? 1000 : 8000;
     const interval = setInterval(() => {
       fetchStatus();
       fetchLogs();
@@ -162,10 +163,9 @@ export default function App() {
   }, [autoRefresh, status?.isHealthy, status?.isFixing, fetchStatus, fetchLogs]);
 
   useEffect(() => {
-    if (showLogs) {
-      logEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [logs, showLogs]);
+    // Auto-scroll to bottom when logs update
+    logEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [logs]);
 
   const CompactView = () => (
     <div className="w-[320px] bg-[#151619] rounded-xl overflow-hidden shadow-2xl border border-white/10 select-text" role="complementary" aria-label="Compact status view">

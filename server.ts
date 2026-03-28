@@ -81,6 +81,40 @@ app.get("/api/status", async (req, res) => {
   }
 });
 
+// API: Prepare Bundle
+app.post("/api/prepare-bundle", (req, res) => {
+  const BUNDLE_SCRIPT = path.join(WORKSPACE_DIR, "prepare-bundle.sh");
+  exec(`bash "${BUNDLE_SCRIPT}"`, (error, stdout, stderr) => {
+    console.log("Bundle preparation completed", { error, stdout, stderr });
+  });
+  res.json({ message: "Bundle preparation initiated" });
+});
+
+// API: Toggle Recovery
+app.post("/api/toggle-recovery", (req, res) => {
+  const { enabled } = req.body;
+  try {
+    if (enabled) {
+      if (fs.existsSync(DISABLE_FLAG)) fs.unlinkSync(DISABLE_FLAG);
+    } else {
+      if (!fs.existsSync(DISABLE_FLAG)) fs.writeFileSync(DISABLE_FLAG, "disabled");
+    }
+    res.json({ success: true, recoveryEnabled: enabled });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// API: Toggle Power Save
+app.post("/api/toggle-power-save", (req, res) => {
+  const { enabled } = req.body;
+  const flag = enabled ? "--power-save-on" : "--power-save-off";
+  exec(`sudo FIX_WIFI_WORKSPACE="${WORKSPACE_DIR}" "${FIX_SCRIPT}" ${flag}`, (error, stdout, stderr) => {
+    console.log("Power save toggle completed", { error, stdout, stderr });
+  });
+  res.json({ success: true, powerSave: enabled ? "on" : "off" });
+});
+
 // API: Manual Fix
 app.post("/api/fix", (req, res) => {
   if (isFixing) return res.status(429).json({ error: "Fix already in progress" });
