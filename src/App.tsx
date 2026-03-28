@@ -768,6 +768,8 @@ export default function App() {
   const [copied, setCopied] = useState(false);
   const [activeTab, setActiveTab] = useState<'status' | 'metrics' | 'telemetry' | 'forensics'>('status');
   const [selectedMetric, setSelectedMetric] = useState<'signal' | 'traffic' | 'bitrate' | 'sockets'>('signal');
+  const [fixStartTime, setFixStartTime] = useState<number | null>(null);
+  const [fixElapsedTime, setFixElapsedTime] = useState(0);
   
   const logEndRef = useRef<HTMLDivElement>(null);
 
@@ -842,6 +844,8 @@ export default function App() {
 
   const triggerFix = async () => {
     setLoading(true);
+    setFixStartTime(Date.now());
+    setFixElapsedTime(0);
     try {
       await fetch("/api/fix", { method: "POST" });
       // We don't clear loading here immediately, we let the status poll handle it
@@ -849,6 +853,7 @@ export default function App() {
       setTimeout(fetchStatus, 500);
     } catch (e) {
       console.error("Failed to trigger fix", e);
+      setFixStartTime(null);
     } finally {
       setLoading(false);
     }
@@ -895,6 +900,19 @@ export default function App() {
     }, intervalTime);
     return () => clearInterval(interval);
   }, [autoRefresh, status?.isHealthy, status?.isFixing, fetchStatus, fetchLogs]);
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (status?.isFixing && fixStartTime) {
+      interval = setInterval(() => {
+        setFixElapsedTime(Math.floor((Date.now() - fixStartTime) / 1000));
+      }, 1000);
+    } else if (!status?.isFixing) {
+      setFixStartTime(null);
+      setFixElapsedTime(0);
+    }
+    return () => clearInterval(interval);
+  }, [status?.isFixing, fixStartTime]);
 
   useEffect(() => {
     // Auto-scroll to bottom when logs update
@@ -1083,14 +1101,22 @@ export default function App() {
             </div>
 
             {/* Progress Bar Slot */}
-            <div className="h-1 w-full bg-white/5 rounded-full overflow-hidden">
-              {status?.isFixing && (
-                <motion.div 
-                  initial={{ x: "-100%" }}
-                  animate={{ x: "100%" }}
-                  transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }}
-                  className="h-full w-1/3 bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.5)]"
-                />
+            <div className="space-y-1">
+              <div className="h-1 w-full bg-white/5 rounded-full overflow-hidden">
+                {status?.isFixing && (
+                  <motion.div 
+                    initial={{ x: "-100%" }}
+                    animate={{ x: "100%" }}
+                    transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }}
+                    className="h-full w-1/3 bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.5)]"
+                  />
+                )}
+              </div>
+              {status?.isFixing && fixElapsedTime > 15 && (
+                <div className="flex items-center justify-between text-[8px] font-mono text-amber-400/60 uppercase">
+                  <span className="animate-pulse">Slow Handshake Detected</span>
+                  <span>{fixElapsedTime}s</span>
+                </div>
               )}
             </div>
 
@@ -1343,10 +1369,15 @@ export default function App() {
                     >
                       <div className="flex items-center gap-2">
                         {loading || status?.isFixing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Wifi className="w-4 h-4" />}
-                        <span className="text-xs uppercase tracking-wider">{status?.isFixing ? 'Fixing...' : 'Force Recovery'}</span>
+                        <span className="text-xs uppercase tracking-wider">
+                          {status?.isFixing ? `Fixing... ${fixElapsedTime > 0 ? `(${fixElapsedTime}s)` : ''}` : 'Force Recovery'}
+                        </span>
                       </div>
                       {!status?.isHealthy && !status?.isFixing && (
                         <span className="text-[8px] uppercase tracking-[0.2em] opacity-80 animate-pulse">Recommended Action</span>
+                      )}
+                      {status?.isFixing && fixElapsedTime > 15 && (
+                        <span className="text-[8px] uppercase tracking-[0.2em] text-amber-500 animate-pulse">Slow Handshake Detected</span>
                       )}
                     </button>
                   </div>

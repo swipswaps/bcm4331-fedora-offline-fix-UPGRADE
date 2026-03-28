@@ -40,8 +40,8 @@ CLEANUP_DONE=0
 # -------------------------
 # TIMEOUTS
 # -------------------------
-CMD_TIMEOUT_SHORT=2
-CMD_TIMEOUT_LONG=5
+CMD_TIMEOUT_SHORT=1
+CMD_TIMEOUT_LONG=2
 
 # -------------------------
 # LOGGING
@@ -153,14 +153,14 @@ perform_recovery() {
 
     # Enable global networking with retries
     local net_restored=0
-    for i in {1..3}; do
+    for i in {1..2}; do
         echo "→ Attempt $i: Enabling global networking..."
         if timeout "$CMD_TIMEOUT_LONG" nmcli networking on 2>/dev/null; then
             log_milestone "NM_NETWORKING_ON_SUCCESS"
             net_restored=1
             break
         fi
-        sleep 1
+        # No sleep between attempts if it's already taking time
     done
     [[ $net_restored -eq 0 ]] && log_milestone "NM_NETWORKING_ON_FAILED"
 
@@ -230,10 +230,10 @@ perform_recovery() {
     # 7. Wait for interface and bring UP
     echo "→ Waiting for interface..."
     IFACE=""
-    for i in {1..10}; do
+    for i in {1..5}; do
         IFACE=$(ls /sys/class/net 2>/dev/null | grep -E '^wl' | head -n1 || echo "")
         [[ -n "$IFACE" ]] && break
-        sleep 1
+        sleep 0.5
     done
 
     if [[ -n "$IFACE" ]]; then
@@ -242,7 +242,8 @@ perform_recovery() {
     fi
 
     # 8. Final verification
-    sleep 2
+    # Reduced sleep for faster feedback
+    sleep 0.5
     if system_is_healthy; then
         log_milestone "RECOVERY_SUCCESS"
         return 0
