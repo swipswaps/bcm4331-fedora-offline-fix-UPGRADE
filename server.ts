@@ -31,6 +31,21 @@ app.use(express.json());
 let isFixing = false;
 let lastFixError: string | null = null;
 let sudoPromptDetected = false;
+let needsSystemSetup = false;
+
+// Check if we have passwordless sudo for the fix script
+const checkSudoPermissions = async () => {
+  try {
+    // -n means non-interactive (fail if password required)
+    await execAsync(`sudo -n "${FIX_SCRIPT}" --force --check-only`, 1000);
+    needsSystemSetup = false;
+  } catch (e) {
+    needsSystemSetup = true;
+  }
+};
+
+// Initial check
+checkSudoPermissions();
 
 // API: Get Unified System Status
 app.get("/api/status", async (req, res) => {
@@ -60,11 +75,41 @@ app.get("/api/status", async (req, res) => {
       isFixing,
       lastFixError,
       sudoPromptDetected,
+      needsSystemSetup,
       timestamp: new Date().toISOString()
     });
   } catch (error) {
     res.status(500).json({ error: String(error) });
   }
+});
+
+// API: Setup System Integration
+app.post("/api/setup-system", (req, res) => {
+  const username = process.env.USER || "owner";
+  const sudoersPath = "/etc/sudoers.d/broadcom-control";
+  
+  // 1. Copy script to /usr/local/bin
+  // 2. Set permissions
+  // 3. Create sudoers.d entry
+  // 4. Restore SELinux context
+  const setupCmd = `
+    sudo cp "${path.join(WORKSPACE_DIR, "fix-wifi.sh")}" /usr/local/bin/fix-wifi && \
+    sudo chmod +x /usr/local/bin/fix-wifi && \
+    echo "${username} ALL=(ALL) NOPASSWD: /usr/local/bin/fix-wifi" | sudo tee ${sudoersPath} && \
+    sudo chmod 440 ${sudoersPath} && \
+    (sudo restorecon -v /usr/local/bin/fix-wifi || true)
+  `.trim().replace(/\n/g, " ");
+
+  exec(setupCmd, (error, stdout, stderr) => {
+    if (error) {
+      console.error("Setup failed:", stderr);
+      res.status(500).json({ error: stderr || error.message });
+    } else {
+      console.log("Setup successful:", stdout);
+      checkSudoPermissions(); // Re-check
+      res.json({ success: true, message: "System integration successful" });
+    }
+  });
 });
 
 // API: Manual Fix

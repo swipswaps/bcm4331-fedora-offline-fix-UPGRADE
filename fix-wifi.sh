@@ -248,7 +248,9 @@ perform_recovery() {
 # -------------------------
 main() {
     # Argument Parsing
-    if [[ "${1:-}" == "--power-save-on" ]]; then
+    if [[ "${1:-}" == "--check-only" ]]; then
+        exit 0
+    elif [[ "${1:-}" == "--power-save-on" ]]; then
         IFACE=$(ls /sys/class/net 2>/dev/null | grep -E '^wl' | head -n1 || echo "")
         [[ -n "$IFACE" ]] && iw dev "$IFACE" set power_save on 2>/dev/null
         log_milestone "MANUAL_POWER_SAVE_ON"
