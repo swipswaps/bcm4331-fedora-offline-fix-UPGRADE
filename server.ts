@@ -239,6 +239,19 @@ app.get("/api/logs", async (req, res) => {
   }
 });
 
+// API: Clear Logs
+app.post("/api/clear-logs", (req, res) => {
+  try {
+    logBuffer = [];
+    if (fs.existsSync(LOG_FILE)) {
+      fs.writeFileSync(LOG_FILE, "");
+    }
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({

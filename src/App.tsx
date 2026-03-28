@@ -16,9 +16,12 @@ import {
   Circle,
   LayoutGrid,
   Maximize2,
+  Minimize2,
   Copy,
   ExternalLink,
-  Check
+  Check,
+  Download,
+  Trash2
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -35,6 +38,198 @@ interface SystemStatus {
   sudoPromptDetected: boolean;
   timestamp: string;
 }
+
+interface LogLine {
+  id: string;
+  timestamp: string;
+  level: 'info' | 'error' | 'success' | 'warn' | 'system';
+  message: string;
+  raw: string;
+}
+
+const TerminalDashboard = ({ logs, autoRefresh, onToggleRefresh, onClear }: { logs: string, autoRefresh: boolean, onToggleRefresh: () => void, onClear?: () => void }) => {
+  const [filter, setFilter] = useState("");
+  const [isLive, setIsLive] = useState(true);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const logEndRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Parse logs into structured lines
+  const parsedLines: LogLine[] = logs.split('\n').filter(l => l.trim()).map((line, idx) => {
+    let level: LogLine['level'] = 'info';
+    let message = line;
+    let timestamp = "";
+
+    // Try to extract timestamp (e.g., Mar 28 08:43:41)
+    const tsMatch = line.match(/^([A-Z][a-z]{2}\s+\d+\s+\d{2}:\d{2}:\d{2})/);
+    if (tsMatch) {
+      timestamp = tsMatch[1];
+      message = line.replace(tsMatch[0], "").trim();
+    }
+
+    if (line.toLowerCase().includes("error") || line.toLowerCase().includes("fail") || line.toLowerCase().includes("denied")) level = 'error';
+    else if (line.toLowerCase().includes("success") || line.toLowerCase().includes("completed") || line.toLowerCase().includes("connected")) level = 'success';
+    else if (line.toLowerCase().includes("warning") || line.toLowerCase().includes("retry")) level = 'warn';
+    else if (line.startsWith("[") && line.includes("]")) level = 'system';
+
+    return { id: `${idx}-${line.substring(0, 10)}`, timestamp, level, message, raw: line };
+  });
+
+  const filteredLines = parsedLines.filter(l => 
+    l.raw.toLowerCase().includes(filter.toLowerCase())
+  );
+
+  useEffect(() => {
+    if (isLive) {
+      logEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [logs, isLive]);
+
+  const copyToClipboard = async () => {
+    try {
+      await navigator.clipboard.writeText(logs);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error("Failed to copy!", err);
+    }
+  };
+
+  const downloadLogs = () => {
+    const blob = new Blob([logs], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `broadcom-telemetry-${new Date().toISOString()}.log`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const getLevelColor = (level: LogLine['level']) => {
+    switch (level) {
+      case 'error': return 'text-red-400 drop-shadow-[0_0_5px_rgba(248,113,113,0.5)]';
+      case 'success': return 'text-emerald-400 drop-shadow-[0_0_5px_rgba(52,211,153,0.5)]';
+      case 'warn': return 'text-amber-400 drop-shadow-[0_0_5px_rgba(251,191,36,0.5)]';
+      case 'system': return 'text-blue-400 drop-shadow-[0_0_5px_rgba(96,165,250,0.5)]';
+      default: return 'text-blue-200/60';
+    }
+  };
+
+  return (
+    <div className={`flex flex-col bg-[#050505] rounded-3xl border border-white/10 overflow-hidden shadow-2xl relative group/term transition-all duration-500 ${isFullscreen ? 'fixed inset-4 z-[100]' : 'h-full w-full'}`}>
+      {/* CRT Scanline Overlay */}
+      <div className="absolute inset-0 pointer-events-none z-10 opacity-[0.03] bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[length:100%_2px,3px_100%]" />
+      
+      {/* Terminal Header */}
+      <div className="px-6 py-3 bg-white/[0.03] border-b border-white/5 flex items-center justify-between z-20">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <div className={`w-2 h-2 rounded-full ${autoRefresh ? 'bg-emerald-500 animate-pulse' : 'bg-white/20'}`} />
+            <span className="text-[10px] font-mono font-bold tracking-widest opacity-60 uppercase">Live Telemetry</span>
+          </div>
+          <div className="h-4 w-px bg-white/10" />
+          <div className="flex gap-3 text-[9px] font-mono opacity-40 uppercase">
+            <span>Lines: {parsedLines.length}</span>
+            <span>Errors: {parsedLines.filter(l => l.level === 'error').length}</span>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <input 
+              type="text" 
+              placeholder="FILTER..." 
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              className="bg-white/5 border border-white/10 rounded-lg px-3 py-1 text-[10px] font-mono focus:outline-none focus:ring-1 focus:ring-blue-500 w-32 transition-all focus:w-48 placeholder:opacity-20"
+            />
+          </div>
+          <div className="flex items-center gap-1">
+            <button 
+              onClick={copyToClipboard}
+              className="p-1.5 rounded-lg border border-white/10 bg-white/5 opacity-40 hover:opacity-100 transition-all"
+              title="Copy Logs"
+            >
+              {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+            </button>
+            <button 
+              onClick={downloadLogs}
+              className="p-1.5 rounded-lg border border-white/10 bg-white/5 opacity-40 hover:opacity-100 transition-all"
+              title="Download Logs"
+            >
+              <Download className="w-3 h-3" />
+            </button>
+            <button 
+              onClick={() => setIsLive(!isLive)}
+              className={`p-1.5 rounded-lg border transition-all ${isLive ? 'bg-blue-500/10 border-blue-500/30 text-blue-400' : 'bg-white/5 border-white/10 opacity-40'}`}
+              title={isLive ? "Auto-scroll enabled" : "Auto-scroll paused"}
+            >
+              <RefreshCw className={`w-3 h-3 ${isLive && autoRefresh ? 'animate-spin' : ''}`} />
+            </button>
+            <button 
+              onClick={() => setIsFullscreen(!isFullscreen)}
+              className="p-1.5 rounded-lg border border-white/10 bg-white/5 opacity-40 hover:opacity-100 transition-all"
+              title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
+            >
+              {isFullscreen ? <Minimize2 className="w-3 h-3" /> : <Maximize2 className="w-3 h-3" />}
+            </button>
+            {onClear && (
+              <button 
+                onClick={onClear}
+                className="p-1.5 rounded-lg border border-white/10 bg-white/5 opacity-40 hover:opacity-100 transition-all"
+                title="Clear Logs"
+              >
+                <Trash2 className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Terminal Body */}
+      <div 
+        ref={containerRef}
+        className="flex-1 overflow-y-auto p-6 font-mono text-[11px] leading-relaxed scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent z-0"
+      >
+        {filteredLines.length === 0 ? (
+          <div className="h-full flex flex-col items-center justify-center opacity-20 space-y-2">
+            <Terminal className="w-8 h-8" />
+            <p className="text-[10px] uppercase tracking-widest">No matching events</p>
+          </div>
+        ) : (
+          <div className="space-y-1">
+            {filteredLines.map((line) => (
+              <div key={line.id} className="group flex gap-4 hover:bg-white/[0.02] -mx-2 px-2 rounded transition-colors">
+                {line.timestamp && (
+                  <span className="opacity-20 shrink-0 select-none">{line.timestamp}</span>
+                )}
+                <span className={`${getLevelColor(line.level)} break-all`}>
+                  {line.message}
+                </span>
+              </div>
+            ))}
+            <div ref={logEndRef} />
+          </div>
+        )}
+      </div>
+
+      {/* Terminal Footer */}
+      <div className="px-6 py-2 bg-black/40 border-t border-white/5 flex items-center justify-between text-[9px] font-mono opacity-30 z-20">
+        <div className="flex gap-4">
+          <span>UTF-8</span>
+          <span>BASH</span>
+          <span>ROOT@FEDORA</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-1.5 h-1.5 rounded-full bg-emerald-500/50" />
+          <span>ENCRYPTED LINK ACTIVE</span>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 export default function App() {
   const [status, setStatus] = useState<SystemStatus | null>(null);
@@ -166,6 +361,15 @@ export default function App() {
     // Auto-scroll to bottom when logs update
     logEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [logs]);
+
+  const clearLogs = async () => {
+    try {
+      await fetch("/api/clear-logs", { method: "POST" });
+      setLogs("");
+    } catch (e) {
+      console.error("Failed to clear logs", e);
+    }
+  };
 
   const CompactView = () => (
     <div className="w-[320px] bg-[#151619] rounded-xl overflow-hidden shadow-2xl border border-white/10 select-text" role="complementary" aria-label="Compact status view">
@@ -338,21 +542,16 @@ export default function App() {
               <motion.div 
                 id="compact-telemetry"
                 initial={{ height: 0, opacity: 0 }}
-                animate={{ height: 120, opacity: 1 }}
+                animate={{ height: 200, opacity: 1 }}
                 exit={{ height: 0, opacity: 0 }}
-                className="mt-2 bg-black/40 rounded border border-white/5 overflow-y-auto p-2 font-mono text-[9px] text-blue-200/50"
+                className="mt-2"
               >
-                <div className="flex justify-end mb-1">
-                  <button 
-                    onClick={copyToClipboard}
-                    className="text-[8px] opacity-50 hover:opacity-100 flex items-center gap-1"
-                  >
-                    {copied ? <Check className="w-2 h-2" /> : <Copy className="w-2 h-2" />}
-                    {copied ? 'COPIED' : 'COPY'}
-                  </button>
-                </div>
-                <pre className="whitespace-pre-wrap">{logs || 'Waiting for events...'}</pre>
-                <div ref={logEndRef} />
+                <TerminalDashboard 
+                  logs={logs} 
+                  autoRefresh={autoRefresh} 
+                  onToggleRefresh={() => setAutoRefresh(!autoRefresh)} 
+                  onClear={clearLogs}
+                />
               </motion.div>
             )}
           </AnimatePresence>
@@ -486,47 +685,12 @@ export default function App() {
 
             {/* Right: Logs */}
             <div className="lg:col-span-7 flex flex-col h-[600px]">
-              <div className="flex items-center justify-between mb-4 px-2">
-                <div className="flex items-center gap-2 opacity-40">
-                  <Terminal className="w-4 h-4" aria-hidden="true" />
-                  <span className="text-[10px] font-mono uppercase tracking-widest">Verbatim Handshake Log</span>
-                </div>
-                <div className="flex items-center gap-4">
-                  <button 
-                    onClick={copyToClipboard}
-                    className="text-[10px] font-mono opacity-30 hover:opacity-100 transition-opacity flex items-center gap-1"
-                  >
-                    {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                    {copied ? 'COPIED' : 'COPY'}
-                  </button>
-                  <button 
-                    onClick={() => setShowRawLogs(!showRawLogs)}
-                    className="text-[10px] font-mono opacity-30 hover:opacity-100 transition-opacity flex items-center gap-1"
-                  >
-                    <ExternalLink className="w-3 h-3" />
-                    {showRawLogs ? 'HIDE RAW' : 'VIEW RAW'}
-                  </button>
-                  <button onClick={() => setAutoRefresh(!autoRefresh)} className="text-[10px] font-mono opacity-30 hover:opacity-100 transition-opacity">
-                    {autoRefresh ? 'PAUSE' : 'RESUME'}
-                  </button>
-                </div>
-              </div>
-              
-              <div className="flex-1 rounded-3xl bg-black border border-white/10 overflow-hidden flex flex-col">
-                {showRawLogs ? (
-                  <textarea
-                    readOnly
-                    value={logs || 'No telemetry data available.'}
-                    className="flex-1 w-full bg-transparent p-6 font-mono text-xs text-blue-200/60 outline-none resize-none scrollbar-thin scrollbar-thumb-white/10"
-                    aria-label="Raw telemetry logs"
-                  />
-                ) : (
-                  <div className="flex-1 p-6 font-mono text-xs text-blue-200/60 overflow-y-auto scrollbar-thin scrollbar-thumb-white/10">
-                    <pre className="whitespace-pre-wrap">{logs || 'Initializing telemetry stream...'}</pre>
-                    <div ref={logEndRef} />
-                  </div>
-                )}
-              </div>
+              <TerminalDashboard 
+                logs={logs} 
+                autoRefresh={autoRefresh} 
+                onToggleRefresh={() => setAutoRefresh(!autoRefresh)} 
+                onClear={clearLogs}
+              />
             </div>
           </div>
         </div>
