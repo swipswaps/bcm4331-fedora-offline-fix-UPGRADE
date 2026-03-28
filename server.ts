@@ -32,6 +32,23 @@ let isFixing = false;
 let lastFixError: string | null = null;
 let sudoPromptDetected = false;
 let logBuffer: string[] = [];
+let metricsHistory: { timestamp: string; signal: number; rx: number; tx: number }[] = [];
+
+// Helper to parse signal strength from iw output
+const parseSignal = (linkOutput: string): number => {
+  const match = linkOutput.match(/signal:\s+(-?\d+)\s+dBm/);
+  return match ? parseInt(match[1]) : 0;
+};
+
+// Helper to parse RX/TX bytes from iw output
+const parseTraffic = (linkOutput: string): { rx: number; tx: number } => {
+  const rxMatch = linkOutput.match(/RX:\s+(\d+)\s+bytes/);
+  const txMatch = linkOutput.match(/TX:\s+(\d+)\s+bytes/);
+  return {
+    rx: rxMatch ? parseInt(rxMatch[1]) : 0,
+    tx: txMatch ? parseInt(txMatch[1]) : 0
+  };
+};
 
 // Check if we have passwordless sudo for the fix script
 const checkSudoPermissions = async () => {
@@ -72,6 +89,18 @@ app.get("/api/status", async (req, res) => {
     ]);
 
     const isHealthy = connectivity === "full" || connectivity === "limited";
+    const currentTimestamp = new Date().toISOString();
+
+    // Track metrics
+    const signal = parseSignal(wifiLink);
+    const traffic = parseTraffic(wifiLink);
+    metricsHistory.push({
+      timestamp: currentTimestamp,
+      signal,
+      rx: traffic.rx,
+      tx: traffic.tx
+    });
+    if (metricsHistory.length > 30) metricsHistory = metricsHistory.slice(-30);
     
     // Verbatim Terminal Logging for System Transparency
     const healthIcon = isHealthy ? "✅" : "⚠️";
@@ -121,6 +150,7 @@ app.get("/api/status", async (req, res) => {
       isFixing,
       lastFixError,
       sudoPromptDetected,
+      metricsHistory,
       timestamp: new Date().toISOString()
     });
   } catch (error) {

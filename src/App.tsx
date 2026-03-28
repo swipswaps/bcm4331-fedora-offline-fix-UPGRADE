@@ -25,6 +25,18 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
+import { 
+  LineChart, 
+  Line, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  ResponsiveContainer,
+  AreaChart,
+  Area
+} from "recharts";
+
 interface SystemStatus {
   isHealthy: boolean;
   networkingEnabled: boolean;
@@ -36,6 +48,7 @@ interface SystemStatus {
   isFixing: boolean;
   lastFixError: string | null;
   sudoPromptDetected: boolean;
+  metricsHistory: { timestamp: string; signal: number; rx: number; tx: number }[];
   timestamp: string;
 }
 
@@ -231,6 +244,77 @@ const TerminalDashboard = ({ logs, autoRefresh, onToggleRefresh, onClear }: { lo
   );
 };
 
+const MetricsDashboard = ({ status, selectedMetric, onSelectMetric }: { status: SystemStatus | null, selectedMetric: 'signal' | 'traffic', onSelectMetric: (m: 'signal' | 'traffic') => void }) => {
+  if (!status || !status.metricsHistory || status.metricsHistory.length === 0) {
+    return (
+      <div className="h-full flex flex-col items-center justify-center opacity-20 space-y-2">
+        <Activity className="w-8 h-8" />
+        <p className="text-[10px] uppercase tracking-widest">Waiting for telemetry...</p>
+      </div>
+    );
+  }
+
+  const data = status.metricsHistory.map(m => ({
+    ...m,
+    time: new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+    rx_kb: (m.rx / 1024).toFixed(1),
+    tx_kb: (m.tx / 1024).toFixed(1)
+  }));
+
+  return (
+    <div className="flex flex-col h-full space-y-4">
+      <div className="flex gap-2">
+        <button 
+          onClick={() => onSelectMetric('signal')}
+          className={`px-3 py-1.5 rounded-lg border text-[10px] font-mono uppercase transition-all ${selectedMetric === 'signal' ? 'bg-blue-500/10 border-blue-500/30 text-blue-400' : 'bg-white/5 border-white/10 opacity-40 hover:opacity-100'}`}
+        >
+          Signal Strength
+        </button>
+        <button 
+          onClick={() => onSelectMetric('traffic')}
+          className={`px-3 py-1.5 rounded-lg border text-[10px] font-mono uppercase transition-all ${selectedMetric === 'traffic' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-white/5 border-white/10 opacity-40 hover:opacity-100'}`}
+        >
+          Network Traffic
+        </button>
+      </div>
+
+      <div className="flex-1 bg-black/40 rounded-2xl border border-white/5 p-4 min-h-[200px]">
+        <ResponsiveContainer width="100%" height="100%">
+          {selectedMetric === 'signal' ? (
+            <AreaChart data={data}>
+              <defs>
+                <linearGradient id="colorSignal" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
+                  <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" vertical={false} />
+              <XAxis dataKey="time" stroke="#ffffff30" fontSize={10} tickLine={false} axisLine={false} />
+              <YAxis domain={[-100, 0]} stroke="#ffffff30" fontSize={10} tickLine={false} axisLine={false} />
+              <Tooltip 
+                contentStyle={{ backgroundColor: '#151619', border: '1px solid #ffffff10', borderRadius: '8px', fontSize: '10px' }}
+                itemStyle={{ color: '#3b82f6' }}
+              />
+              <Area type="monotone" dataKey="signal" stroke="#3b82f6" fillOpacity={1} fill="url(#colorSignal)" />
+            </AreaChart>
+          ) : (
+            <LineChart data={data}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" vertical={false} />
+              <XAxis dataKey="time" stroke="#ffffff30" fontSize={10} tickLine={false} axisLine={false} />
+              <YAxis stroke="#ffffff30" fontSize={10} tickLine={false} axisLine={false} />
+              <Tooltip 
+                contentStyle={{ backgroundColor: '#151619', border: '1px solid #ffffff10', borderRadius: '8px', fontSize: '10px' }}
+              />
+              <Line type="monotone" dataKey="rx_kb" name="RX (KB)" stroke="#10b981" strokeWidth={2} dot={false} />
+              <Line type="monotone" dataKey="tx_kb" name="TX (KB)" stroke="#3b82f6" strokeWidth={2} dot={false} />
+            </LineChart>
+          )}
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+};
+
 export default function App() {
   const [status, setStatus] = useState<SystemStatus | null>(null);
   const [logs, setLogs] = useState<string>("");
@@ -241,6 +325,8 @@ export default function App() {
   const [showLogs, setShowLogs] = useState(false);
   const [showRawLogs, setShowRawLogs] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [activeTab, setActiveTab] = useState<'status' | 'metrics'>('status');
+  const [selectedMetric, setSelectedMetric] = useState<'signal' | 'traffic'>('signal');
   
   const logEndRef = useRef<HTMLDivElement>(null);
 
@@ -392,138 +478,166 @@ export default function App() {
 
       {/* Status Summary */}
       <div className="p-4 space-y-4">
-        {/* Dynamic Slot for Banners - Collapses when empty but animates to prevent jumping */}
-        <motion.div 
-          initial={false}
-          animate={{ height: (status?.sudoPromptDetected || ((!status?.networkingEnabled || !status?.wifiEnabled) && status?.networkingEnabled !== undefined && !status?.isFixing)) ? "auto" : 0 }}
-          className="overflow-hidden"
-        >
-          <div className="pb-4 space-y-3">
-            {/* Sudo Warning */}
-            {status?.sudoPromptDetected && (
-              <motion.div 
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="p-3 bg-red-500/20 border border-red-500/30 rounded-lg flex items-start gap-3"
-                role="alert"
-              >
-                <ShieldAlert className="w-4 h-4 text-red-400 mt-0.5" aria-hidden="true" />
-                <div className="flex-1">
-                  <span className="text-[10px] font-bold text-red-200 uppercase tracking-tight">Sudo Password Required</span>
-                  <p className="text-[9px] text-red-200/70 leading-relaxed">
-                    Waiting for password in terminal.
-                  </p>
-                </div>
-              </motion.div>
-            )}
-
-            {/* Enable Now Banner */}
-            {(!status?.networkingEnabled || !status?.wifiEnabled) && status?.networkingEnabled !== undefined && !status?.isFixing && !status?.sudoPromptDetected && (
-              <motion.div 
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="p-3 bg-amber-500/20 border border-amber-500/30 rounded-lg flex items-center justify-between gap-3"
-                role="alert"
-              >
-                <div className="flex items-center gap-2">
-                  <ShieldAlert className="w-4 h-4 text-amber-400" aria-hidden="true" />
-                  <span className="text-[10px] font-medium text-amber-200 uppercase">
-                    {!status.networkingEnabled ? 'Networking Disabled' : 'Wi-Fi Radio Disabled'}
-                  </span>
-                </div>
-                <button 
-                  onClick={triggerFix}
-                  className="px-2 py-1 bg-amber-500 text-black text-[9px] font-bold rounded uppercase hover:bg-amber-400 transition-colors"
-                >
-                  Enable
-                </button>
-              </motion.div>
-            )}
-          </div>
-        </motion.div>
-
-        {/* Network Health Card */}
-        <div className="flex items-center justify-between bg-white/5 p-3 rounded-xl border border-white/5">
-          <div className="flex items-center gap-3">
-            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${status?.isHealthy ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-400'}`} aria-hidden="true">
-              {status?.isHealthy ? <Wifi className="w-5 h-5" /> : <WifiOff className="w-5 h-5" />}
-            </div>
-            <div>
-              <h3 className="text-xs font-medium">{status?.isHealthy ? 'Network Healthy' : 'Network Degraded'}</h3>
-              <p className="text-[9px] font-mono opacity-40 uppercase">{status?.kernel || 'Detecting...'}</p>
-            </div>
-          </div>
+        {/* View Selector */}
+        <div className="flex p-1 bg-white/5 rounded-lg border border-white/5">
           <button 
-            onClick={triggerFix}
-            disabled={loading || status?.isFixing}
-            className="p-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition-all active:scale-95 disabled:opacity-30"
+            onClick={() => setActiveTab('status')}
+            className={`flex-1 py-1.5 text-[10px] font-mono uppercase rounded-md transition-all ${activeTab === 'status' ? 'bg-white/10 text-white shadow-sm' : 'opacity-40 hover:opacity-100'}`}
           >
-            <RefreshCw className={`w-4 h-4 ${loading || status?.isFixing ? 'animate-spin' : 'opacity-60'}`} />
+            Status
+          </button>
+          <button 
+            onClick={() => setActiveTab('metrics')}
+            className={`flex-1 py-1.5 text-[10px] font-mono uppercase rounded-md transition-all ${activeTab === 'metrics' ? 'bg-white/10 text-white shadow-sm' : 'opacity-40 hover:opacity-100'}`}
+          >
+            Metrics
           </button>
         </div>
 
-        {/* Progress Bar Slot */}
-        <div className="h-1 w-full bg-white/5 rounded-full overflow-hidden">
-          {status?.isFixing && (
+        {activeTab === 'status' ? (
+          <>
+            {/* Dynamic Slot for Banners - Collapses when empty but animates to prevent jumping */}
             <motion.div 
-              initial={{ x: "-100%" }}
-              animate={{ x: "100%" }}
-              transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }}
-              className="h-full w-1/3 bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.5)]"
-            />
-          )}
-        </div>
-
-        {/* Toggles */}
-        <div className="space-y-1">
-          <div className="flex items-center justify-between p-2 rounded-lg hover:bg-white/[0.02] transition-colors">
-            <div className="flex items-center gap-2">
-              <Power className={`w-3 h-3 ${status?.recoveryEnabled ? 'text-blue-400' : 'opacity-30'}`} aria-hidden="true" />
-              <span className="text-[11px] opacity-70">Autonomous Recovery</span>
-            </div>
-            <button 
-              onClick={toggleRecovery} 
-              aria-pressed={status?.recoveryEnabled}
-              aria-label="Toggle autonomous recovery"
-              className={`w-8 h-4 rounded-full relative transition-colors focus:ring-2 focus:ring-blue-500 outline-none ${status?.recoveryEnabled ? 'bg-blue-600' : 'bg-white/10'}`}
+              initial={false}
+              animate={{ height: (status?.sudoPromptDetected || ((!status?.networkingEnabled || !status?.wifiEnabled) && status?.networkingEnabled !== undefined && !status?.isFixing)) ? "auto" : 0 }}
+              className="overflow-hidden"
             >
-              <motion.div animate={{ x: status?.recoveryEnabled ? 18 : 2 }} className="absolute top-0.5 w-3 h-3 bg-white rounded-full" />
-            </button>
-          </div>
+              <div className="pb-4 space-y-3">
+                {/* Sudo Warning */}
+                {status?.sudoPromptDetected && (
+                  <motion.div 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="p-3 bg-red-500/20 border border-red-500/30 rounded-lg flex items-start gap-3"
+                    role="alert"
+                  >
+                    <ShieldAlert className="w-4 h-4 text-red-400 mt-0.5" aria-hidden="true" />
+                    <div className="flex-1">
+                      <span className="text-[10px] font-bold text-red-200 uppercase tracking-tight">Sudo Password Required</span>
+                      <p className="text-[9px] text-red-200/70 leading-relaxed">
+                        Waiting for password in terminal.
+                      </p>
+                    </div>
+                  </motion.div>
+                )}
 
-          <div className="flex items-center justify-between p-2 rounded-lg hover:bg-white/[0.02] transition-colors">
-            <div className="flex items-center gap-2">
-              <Zap className={`w-3 h-3 ${!status?.powerSave?.includes("on") ? 'text-emerald-400' : 'opacity-30'}`} aria-hidden="true" />
-              <span className="text-[11px] opacity-70">Performance Mode</span>
-            </div>
-            <button 
-              onClick={togglePowerSave} 
-              aria-pressed={!status?.powerSave?.includes("on")}
-              aria-label="Toggle performance mode"
-              className={`w-8 h-4 rounded-full relative transition-colors focus:ring-2 focus:ring-emerald-500 outline-none ${!status?.powerSave?.includes("on") ? 'bg-emerald-600' : 'bg-white/10'}`}
-            >
-              <motion.div animate={{ x: !status?.powerSave?.includes("on") ? 18 : 2 }} className="absolute top-0.5 w-3 h-3 bg-white rounded-full" />
-            </button>
-          </div>
+                {/* Enable Now Banner */}
+                {(!status?.networkingEnabled || !status?.wifiEnabled) && status?.networkingEnabled !== undefined && !status?.isFixing && !status?.sudoPromptDetected && (
+                  <motion.div 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="p-3 bg-amber-500/20 border border-amber-500/30 rounded-lg flex items-center justify-between gap-3"
+                    role="alert"
+                  >
+                    <div className="flex items-center gap-2">
+                      <ShieldAlert className="w-4 h-4 text-amber-400" aria-hidden="true" />
+                      <span className="text-[10px] font-medium text-amber-200 uppercase">
+                        {!status.networkingEnabled ? 'Networking Disabled' : 'Wi-Fi Radio Disabled'}
+                      </span>
+                    </div>
+                    <button 
+                      onClick={triggerFix}
+                      className="px-2 py-1 bg-amber-500 text-black text-[9px] font-bold rounded uppercase hover:bg-amber-400 transition-colors"
+                    >
+                      Enable
+                    </button>
+                  </motion.div>
+                )}
+              </div>
+            </motion.div>
 
-          <div className="flex items-center justify-between p-2 rounded-lg hover:bg-white/[0.02] transition-colors">
-            <div className="flex items-center gap-2">
-              <ShieldCheck className={`w-3 h-3 ${status?.bundleReady ? 'text-emerald-400' : 'text-amber-400'}`} aria-hidden="true" />
-              <span className="text-[11px] opacity-70">Offline Bundle</span>
-            </div>
-            {!status?.bundleReady ? (
+            {/* Network Health Card */}
+            <div className="flex items-center justify-between bg-white/5 p-3 rounded-xl border border-white/5">
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${status?.isHealthy ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-400'}`} aria-hidden="true">
+                  {status?.isHealthy ? <Wifi className="w-5 h-5" /> : <WifiOff className="w-5 h-5" />}
+                </div>
+                <div>
+                  <h3 className="text-xs font-medium">{status?.isHealthy ? 'Network Healthy' : 'Network Degraded'}</h3>
+                  <p className="text-[9px] font-mono opacity-40 uppercase">{status?.kernel || 'Detecting...'}</p>
+                </div>
+              </div>
               <button 
-                onClick={prepareBundle} 
-                disabled={preparingBundle} 
-                className="text-[9px] font-mono text-blue-400 hover:underline focus:outline-none focus:text-blue-300"
+                onClick={triggerFix}
+                disabled={loading || status?.isFixing}
+                className="p-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition-all active:scale-95 disabled:opacity-30"
               >
-                {preparingBundle ? 'PREPARING...' : 'PREPARE'}
+                <RefreshCw className={`w-4 h-4 ${loading || status?.isFixing ? 'animate-spin' : 'opacity-60'}`} />
               </button>
-            ) : (
-              <Circle className="w-2 h-2 fill-emerald-500 text-emerald-500" aria-hidden="true" />
-            )}
+            </div>
+
+            {/* Progress Bar Slot */}
+            <div className="h-1 w-full bg-white/5 rounded-full overflow-hidden">
+              {status?.isFixing && (
+                <motion.div 
+                  initial={{ x: "-100%" }}
+                  animate={{ x: "100%" }}
+                  transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }}
+                  className="h-full w-1/3 bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.5)]"
+                />
+              )}
+            </div>
+
+            {/* Toggles */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between p-2 rounded-lg hover:bg-white/[0.02] transition-colors">
+                <div className="flex items-center gap-2">
+                  <Power className={`w-3 h-3 ${status?.recoveryEnabled ? 'text-blue-400' : 'opacity-30'}`} aria-hidden="true" />
+                  <span className="text-[11px] opacity-70">Autonomous Recovery</span>
+                </div>
+                <button 
+                  onClick={toggleRecovery} 
+                  aria-pressed={status?.recoveryEnabled}
+                  aria-label="Toggle autonomous recovery"
+                  className={`w-8 h-4 rounded-full relative transition-colors focus:ring-2 focus:ring-blue-500 outline-none ${status?.recoveryEnabled ? 'bg-blue-600' : 'bg-white/10'}`}
+                >
+                  <motion.div animate={{ x: status?.recoveryEnabled ? 18 : 2 }} className="absolute top-0.5 w-3 h-3 bg-white rounded-full" />
+                </button>
+              </div>
+
+              <div className="flex items-center justify-between p-2 rounded-lg hover:bg-white/[0.02] transition-colors">
+                <div className="flex items-center gap-2">
+                  <Zap className={`w-3 h-3 ${!status?.powerSave?.includes("on") ? 'text-emerald-400' : 'opacity-30'}`} aria-hidden="true" />
+                  <span className="text-[11px] opacity-70">Performance Mode</span>
+                </div>
+                <button 
+                  onClick={togglePowerSave} 
+                  aria-pressed={!status?.powerSave?.includes("on")}
+                  aria-label="Toggle performance mode"
+                  className={`w-8 h-4 rounded-full relative transition-colors focus:ring-2 focus:ring-emerald-500 outline-none ${!status?.powerSave?.includes("on") ? 'bg-emerald-600' : 'bg-white/10'}`}
+                >
+                  <motion.div animate={{ x: !status?.powerSave?.includes("on") ? 18 : 2 }} className="absolute top-0.5 w-3 h-3 bg-white rounded-full" />
+                </button>
+              </div>
+
+              <div className="flex items-center justify-between p-2 rounded-lg hover:bg-white/[0.02] transition-colors">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className={`w-3 h-3 ${status?.bundleReady ? 'text-emerald-400' : 'text-amber-400'}`} aria-hidden="true" />
+                  <span className="text-[11px] opacity-70">Offline Bundle</span>
+                </div>
+                {!status?.bundleReady ? (
+                  <button 
+                    onClick={prepareBundle} 
+                    disabled={preparingBundle} 
+                    className="text-[9px] font-mono text-blue-400 hover:underline focus:outline-none focus:text-blue-300"
+                  >
+                    {preparingBundle ? 'PREPARING...' : 'PREPARE'}
+                  </button>
+                ) : (
+                  <Circle className="w-2 h-2 fill-emerald-500 text-emerald-500" aria-hidden="true" />
+                )}
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="h-[250px]">
+            <MetricsDashboard 
+              status={status} 
+              selectedMetric={selectedMetric} 
+              onSelectMetric={setSelectedMetric} 
+            />
           </div>
-        </div>
+        )}
 
         {/* Mini Log Toggle */}
         <div className="pt-2 border-t border-white/5">
