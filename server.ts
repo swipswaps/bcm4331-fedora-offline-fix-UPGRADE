@@ -50,7 +50,7 @@ app.get("/api/status", async (req, res) => {
     ]);
 
     const isHealthy = connectivity === "full" || connectivity === "limited";
-    console.log(`[${new Date().toISOString()}] GET /api/status -> Healthy: ${isHealthy}, Net: ${networkingState}, WiFi: ${wifiState}`);
+    console.log(`[${new Date().toISOString()}] STATUS: Healthy=${isHealthy} | Net=${networkingState} | WiFi=${wifiState} | PowerSave=${powerSave} | Kernel=${kernel}`);
 
     const responseData = {
       recoveryEnabled,
@@ -120,13 +120,18 @@ app.post("/api/fix", (req, res) => {
 app.get("/api/logs", async (req, res) => {
   try {
     if (!fs.existsSync(LOG_FILE)) {
-      console.log(`[${new Date().toISOString()}] GET /api/logs -> No logs found`);
+      console.log(`[${new Date().toISOString()}] LOGS: Path=${LOG_FILE} | Status=NotFound`);
       return res.json({ logs: "No logs found yet." });
     }
+    
+    const stats = fs.statSync(LOG_FILE);
+    const fileSizeKB = (stats.size / 1024).toFixed(2);
+    
     // Efficiently get last 100 lines with timeout
     const { stdout } = await execAsync(`tail -n 100 ${LOG_FILE}`, 2000);
     const lineCount = stdout.split("\n").filter(l => l.trim()).length;
-    console.log(`[${new Date().toISOString()}] GET /api/logs -> Returned ${lineCount} lines`);
+    
+    console.log(`[${new Date().toISOString()}] LOGS: Path=${LOG_FILE} | Size=${fileSizeKB}KB | Lines=${lineCount}`);
     res.json({ logs: stdout });
   } catch (error) {
     console.error("Error in /api/logs:", error);
@@ -151,6 +156,9 @@ async function startServer() {
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Broadcom Control Center running on http://localhost:${PORT}`);
+    console.log(`WORKSPACE: ${WORKSPACE_DIR}`);
+    console.log(`FIX_SCRIPT: ${FIX_SCRIPT}`);
+    console.log(`LOG_FILE: ${LOG_FILE}`);
   });
 }
 
