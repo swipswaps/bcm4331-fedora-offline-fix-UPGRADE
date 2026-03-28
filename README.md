@@ -100,7 +100,13 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now fix-wifi.timer
 ```
 
-## 📂 Project Structure
+### 4. Install Desktop Entry (Optional)
+To make the Control Center launchable from your application menu (GNOME/XFCE/KDE):
+```bash
+sudo cp broadcom-control.desktop /usr/share/applications/
+update-desktop-database ~/.local/share/applications
+```
+Now you can search for "Broadcom Control Center" in your app menu.
 
 - `server.ts`: Express backend that bridges the UI to the Linux system bus.
 - `src/App.tsx`: React frontend featuring the "Compact Applet" and "Full Dashboard" views.
