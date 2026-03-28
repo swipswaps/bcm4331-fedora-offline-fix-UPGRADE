@@ -49,6 +49,14 @@ interface SystemStatus {
   lastFixError: string | null;
   sudoPromptDetected: boolean;
   metricsHistory: { timestamp: string; signal: number; rx: number; tx: number }[];
+  verbatim?: {
+    nmLogs: string;
+    kernelLogs: string;
+    sockets: string;
+    ipAddr: string;
+    wifiLink: string;
+    nearbyAPs: string;
+  };
   timestamp: string;
 }
 
@@ -315,6 +323,52 @@ const MetricsDashboard = ({ status, selectedMetric, onSelectMetric }: { status: 
   );
 };
 
+const TelemetryDashboard = ({ status }: { status: SystemStatus | null }) => {
+  if (!status || !status.verbatim) {
+    return (
+      <div className="h-full flex flex-col items-center justify-center opacity-20 space-y-2">
+        <Activity className="w-8 h-8" />
+        <p className="text-[10px] uppercase tracking-widest">Waiting for telemetry...</p>
+      </div>
+    );
+  }
+
+  const sections = [
+    { title: 'Network Interfaces', content: status.verbatim.ipAddr },
+    { title: 'Wi-Fi Link Status', content: status.verbatim.wifiLink },
+    { title: 'Active Sockets', content: status.verbatim.sockets },
+    { title: 'Nearby Access Points', content: status.verbatim.nearbyAPs },
+    { title: 'Kernel Messages (Wi-Fi)', content: status.verbatim.kernelLogs },
+    { title: 'NetworkManager Logs', content: status.verbatim.nmLogs },
+    { title: 'Raw JSON Status', content: JSON.stringify(status, null, 2) },
+  ];
+
+  return (
+    <div className="flex flex-col h-full space-y-4 overflow-hidden">
+      <div className="flex-1 overflow-y-auto space-y-4 pr-2 custom-scrollbar">
+        {sections.map((section, idx) => (
+          <div key={idx} className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <h4 className="text-[9px] font-bold text-blue-400 uppercase tracking-wider">{section.title}</h4>
+              <button 
+                onClick={() => {
+                  navigator.clipboard.writeText(section.content);
+                }}
+                className="text-[8px] opacity-40 hover:opacity-100 transition-opacity uppercase"
+              >
+                Copy
+              </button>
+            </div>
+            <div className="p-3 bg-black/40 rounded-lg border border-white/5 font-mono text-[9px] leading-relaxed whitespace-pre overflow-x-auto text-white/70">
+              {section.content || 'No data available'}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 export default function App() {
   const [status, setStatus] = useState<SystemStatus | null>(null);
   const [logs, setLogs] = useState<string>("");
@@ -325,7 +379,7 @@ export default function App() {
   const [showLogs, setShowLogs] = useState(false);
   const [showRawLogs, setShowRawLogs] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [activeTab, setActiveTab] = useState<'status' | 'metrics'>('status');
+  const [activeTab, setActiveTab] = useState<'status' | 'metrics' | 'telemetry'>('status');
   const [selectedMetric, setSelectedMetric] = useState<'signal' | 'traffic'>('signal');
   
   const logEndRef = useRef<HTMLDivElement>(null);
@@ -492,6 +546,12 @@ export default function App() {
           >
             Metrics
           </button>
+          <button 
+            onClick={() => setActiveTab('telemetry')}
+            className={`flex-1 py-1.5 text-[10px] font-mono uppercase rounded-md transition-all ${activeTab === 'telemetry' ? 'bg-white/10 text-white shadow-sm' : 'opacity-40 hover:opacity-100'}`}
+          >
+            Telemetry
+          </button>
         </div>
 
         {activeTab === 'status' ? (
@@ -630,14 +690,29 @@ export default function App() {
                 )}
               </div>
             </div>
+
+            {/* Live Handshake Snippet */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] font-bold text-blue-400 uppercase tracking-wider">Live Handshake Snippet</span>
+                <span className="text-[8px] opacity-40 font-mono uppercase">{status?.timestamp ? new Date(status.timestamp).toLocaleTimeString() : '---'}</span>
+              </div>
+              <div className="p-3 bg-black/40 rounded-lg border border-white/5 font-mono text-[9px] leading-relaxed text-white/70 min-h-[60px] max-h-[100px] overflow-y-auto custom-scrollbar">
+                {logs.split('\n').slice(-4).join('\n') || 'Waiting for handshake data...'}
+              </div>
+            </div>
           </>
-        ) : (
+        ) : activeTab === 'metrics' ? (
           <div className="h-[250px]">
             <MetricsDashboard 
               status={status} 
               selectedMetric={selectedMetric} 
               onSelectMetric={setSelectedMetric} 
             />
+          </div>
+        ) : (
+          <div className="h-[350px]">
+            <TelemetryDashboard status={status} />
           </div>
         )}
 

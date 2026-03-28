@@ -151,6 +151,14 @@ app.get("/api/status", async (req, res) => {
       lastFixError,
       sudoPromptDetected,
       metricsHistory,
+      verbatim: {
+        nmLogs,
+        kernelLogs,
+        sockets,
+        ipAddr,
+        wifiLink,
+        nearbyAPs
+      },
       timestamp: new Date().toISOString()
     });
   } catch (error) {
