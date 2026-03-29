@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef, ErrorInfo, ReactNode } from "react";
 import { 
   Wifi, 
   WifiOff, 
@@ -21,9 +21,65 @@ import {
   ExternalLink,
   Check,
   Download,
-  Trash2
+  Trash2,
+  AlertTriangle
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
+
+interface ErrorBoundaryProps {
+  children: ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+}
+
+// Error Boundary Component
+class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  state: ErrorBoundaryState = { hasError: false, error: null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error("Uncaught error:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-[#0A0A0A] text-white flex flex-col items-center justify-center p-6 font-mono">
+          <div className="w-full max-w-md p-8 rounded-3xl bg-red-500/10 border border-red-500/20 space-y-6 text-center">
+            <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center mx-auto">
+              <AlertTriangle className="w-8 h-8 text-red-500" />
+            </div>
+            <div className="space-y-2">
+              <h2 className="text-xl font-bold uppercase tracking-tighter">UI Execution Halted</h2>
+              <p className="text-xs text-white/60 leading-relaxed">
+                A critical runtime error occurred in the dashboard rendering engine.
+              </p>
+            </div>
+            <div className="p-4 bg-black/40 rounded-xl border border-white/5 text-left overflow-auto max-h-40">
+              <code className="text-[10px] text-red-400 break-all">
+                {this.state.error?.toString()}
+              </code>
+            </div>
+            <button 
+              onClick={() => window.location.reload()}
+              className="w-full py-3 bg-white text-black rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-white/90 transition-all"
+            >
+              Reboot Interface
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
 
 import { 
   LineChart, 
@@ -756,9 +812,18 @@ const parseNearbyAPs = (nearby: string) => {
   };
 
 export default function App() {
+  return (
+    <ErrorBoundary>
+      <AppContent />
+    </ErrorBoundary>
+  );
+}
+
+function AppContent() {
   const [status, setStatus] = useState<SystemStatus | null>(null);
   const [logs, setLogs] = useState<string>("");
   const [loading, setLoading] = useState(false);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [preparingBundle, setPreparingBundle] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [isCompact, setIsCompact] = useState(window.innerWidth < 1024);
@@ -794,6 +859,8 @@ export default function App() {
       setStatus(data);
     } catch (e) {
       console.error("Failed to fetch status", e);
+    } finally {
+      setIsInitialLoading(false);
     }
   }, []);
 
@@ -1231,6 +1298,20 @@ export default function App() {
       </div>
     </div>
   );
+
+  if (isInitialLoading) {
+    return (
+      <div className="min-h-screen bg-[#0A0A0A] text-white flex flex-col items-center justify-center font-mono">
+        <div className="space-y-4 text-center">
+          <RefreshCw className="w-8 h-8 text-blue-500 animate-spin mx-auto" />
+          <div className="space-y-1">
+            <p className="text-[10px] uppercase tracking-[0.3em] opacity-40">Establishing Link</p>
+            <p className="text-xs font-bold">Broadcom Control Center</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#0A0A0A] text-[#E0E0E0] font-sans select-text flex flex-col p-6">
