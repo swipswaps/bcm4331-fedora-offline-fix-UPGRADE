@@ -79,7 +79,9 @@ fi
 # -------------------------
 # GLOBAL STATE
 # -------------------------
-# REMOVED set -e and set -o pipefail for maximum resilience
+# NUCLEAR RESILIENCE: Explicitly disable all exit-on-error behaviors
+set +e
+set +o pipefail
 set -u 
 
 TRACE_PID=""
@@ -111,21 +113,22 @@ run_verbatim() {
 log_milestone() {
     local msg="$1"
     # REQUIREMENT: tee display verbatim milestones to terminal and log
-    echo "→ MILESTONE: $msg" | tee -a "$TRACE_LOG"
+    echo "→ MILESTONE: $msg" | tee -a "$TRACE_LOG" || true
     
     if [[ -f "$TRACE_LOG" ]]; then
-        echo "[SYSTEM SNAPSHOT @ $(date)]" >> "$TRACE_LOG"
-        # Heartbeat to prove script is alive
-        echo "HEARTBEAT: Script is active at $(date)" >> "$TRACE_LOG"
-        journalctl -n 10 --no-pager -u NetworkManager -t kernel | grep -E "wlp|b43|wl0|NetworkManager|tg3|enp|eth" >> "$TRACE_LOG" 2>/dev/null || true
-        echo "------------------------------------" >> "$TRACE_LOG"
+        {
+            echo "[SYSTEM SNAPSHOT @ $(date)]"
+            echo "HEARTBEAT: Script is active at $(date)"
+            journalctl -n 10 --no-pager -u NetworkManager -t kernel 2>/dev/null | grep -E "wlp|b43|wl0|NetworkManager|tg3|enp|eth" || true
+            echo "------------------------------------"
+        } >> "$TRACE_LOG" 2>/dev/null || true
     fi
 }
 
 # Helper for debug logging that always goes to the log
 log_debug() {
     local msg="$1"
-    echo "DEBUG: $msg" | tee -a "$TRACE_LOG"
+    echo "DEBUG: $msg" | tee -a "$TRACE_LOG" || true
 }
 
 # -------------------------
@@ -236,17 +239,18 @@ perform_recovery() {
 
     # 6. Deterministic Reconnect (The Critical Fix)
     log_milestone "PROFILE_RECONNECT_START"
-    log_debug "Starting wifi_rescan..."
-    wifi_rescan "$IFACE"
-    log_debug "wifi_rescan finished."
+    log_debug "Step 6a: Starting wifi_rescan..."
+    wifi_rescan "$IFACE" || true
+    log_debug "Step 6b: wifi_rescan finished."
 
     local entries
-    log_debug "Gathering profiles..."
-    # Use a simpler command to avoid pipe issues
-    entries=$(nmcli -t -f NAME,TYPE,connection.autoconnect-priority connection show | grep ":wifi:" | sort -t: -k3,3nr | cut -d: -f1,3)
-    log_debug "Profiles gathered: ${entries:-EMPTY}"
+    log_debug "Step 6c: Gathering profiles..."
+    # NUCLEAR: Ensure the subshell itself doesn't return error status
+    entries=$( (nmcli -t -f NAME,TYPE,connection.autoconnect-priority connection show | grep ":wifi:" | sort -t: -k3,3nr | cut -d: -f1,3) || echo "" )
+    log_debug "Step 6d: Profiles gathered: ${entries:-EMPTY}"
     
     if [[ -n "$entries" ]]; then
+        log_debug "Step 6e: Entering profile loop..."
         while IFS=: read -r conn prio; do
             [[ -z "$conn" ]] && continue
             if profile_matches_iface "$conn" "$IFACE"; then
