@@ -45,8 +45,8 @@ log_milestone() {
     echo "→ MILESTONE: $msg" >> "$TRACE_LOG"
     
     if [[ -f "$TRACE_LOG" ]]; then
-        echo "[SYSTEM SNAPSHOT @ $(date +%H:%M:%S)]" >> "$TRACE_LOG"
-        journalctl -n 5 --no-pager -u NetworkManager -t kernel | grep -E "wlp|b43|wl0|NetworkManager" >> "$TRACE_LOG" 2>/dev/null || true
+        echo "[SYSTEM SNAPSHOT @ $(date)]" >> "$TRACE_LOG"
+        journalctl -n 10 --no-pager -u NetworkManager -t kernel | grep -E "wlp|b43|wl0|NetworkManager|tg3|enp|eth" >> "$TRACE_LOG" 2>/dev/null || true
         echo "------------------------------------" >> "$TRACE_LOG"
     fi
 }
@@ -117,9 +117,11 @@ perform_recovery() {
     local ETH_IFACE
     ETH_IFACE=$(ls /sys/class/net 2>/dev/null | grep -E '^en|^eth' | head -n1 || echo "")
     if [[ -n "$ETH_IFACE" ]]; then
+        log_milestone "QUARANTINE_ETHERNET_START:$ETH_IFACE"
         echo "→ Quarantining Ethernet ($ETH_IFACE) to stabilize Wi-Fi..."
         nmcli device set "$ETH_IFACE" managed no 2>/dev/null || true
         ip link set "$ETH_IFACE" down 2>/dev/null || true
+        log_milestone "QUARANTINE_ETHERNET_SUCCESS"
     fi
 
     # 2. Ensure NetworkManager is running
@@ -180,13 +182,13 @@ perform_recovery() {
     fi
 
     # 7. Final verification loop
-    for i in {1..10}; do
+    for i in {1..15}; do
         if system_is_healthy; then
-            # Restore Ethernet management after Wi-Fi is stable
-            if [[ -n "${ETH_IFACE:-}" ]]; then
-                nmcli device set "$ETH_IFACE" managed yes 2>/dev/null || true
-            fi
             log_milestone "RECOVERY_SUCCESS"
+            # We do NOT restore Ethernet here. We keep it quarantined until the user
+            # manually re-enables it or reboots, to prevent flapping from killing the link again.
+            echo "→ Wi-Fi stable. Ethernet ($ETH_IFACE) remains quarantined for stability."
+            log_milestone "ETHERNET_REMAINS_QUARANTINED"
             return 0
         fi
         sleep 1
@@ -205,6 +207,10 @@ main() {
         case $1 in
             --workspace) WORKSPACE_DIR="$2"; shift 2 ;;
             --check-only) exit 0 ;;
+            --force) 
+                # Truncate log on force run to ensure we see fresh data
+                echo "=== TRACE START $(date) ===" > "$TRACE_LOG"
+                shift ;;
             --power-save-on) 
                 IFACE=$(ls /sys/class/net | grep -E '^wl' | head -n1 || true)
                 [[ -n "$IFACE" ]] && iw dev "$IFACE" set power_save on 2>/dev/null
