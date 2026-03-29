@@ -3,7 +3,7 @@
 # File: fix-wifi.sh (v46 - AUTH-AWARE + DETERMINISTIC RECOVERY + NM-CONSISTENT)
 # -----------------------------------------------------------------------------
 
-set -euo pipefail
+set -uo pipefail
 
 # -------------------------
 # ROOT ESCALATION
@@ -79,6 +79,9 @@ fi
 # -------------------------
 # GLOBAL STATE
 # -------------------------
+# REMOVED set -e to prevent silent crashes on non-fatal command failures
+set -uo pipefail 
+
 TRACE_PID=""
 CLEANUP_DONE=0
 CMD_TIMEOUT_SHORT=1

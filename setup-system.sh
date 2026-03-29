@@ -25,6 +25,7 @@ fi
 
 # 2. Copy script to /usr/local/bin
 echo "📦 Installing recovery script to $FIX_SCRIPT_DEST..."
+chmod +x "$FIX_SCRIPT_SRC"
 sudo cp "$FIX_SCRIPT_SRC" "$FIX_SCRIPT_DEST"
 sudo chmod +x "$FIX_SCRIPT_DEST"
 

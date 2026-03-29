@@ -74,9 +74,15 @@ const checkSudoPermissions = async () => {
     try {
       fs.accessSync(FIX_SCRIPT, fs.constants.X_OK);
     } catch (err) {
-      console.warn(`⚠️ System integration error: ${FIX_SCRIPT} is not executable.`);
-      sudoPromptDetected = true;
-      return;
+      console.warn(`⚠️ System integration error: ${FIX_SCRIPT} is not executable. Attempting to fix...`);
+      try {
+        fs.chmodSync(FIX_SCRIPT, 0o755);
+        console.log(`✅ Fixed permissions for ${FIX_SCRIPT}`);
+      } catch (chmodErr) {
+        console.error(`❌ Could not fix permissions for ${FIX_SCRIPT}:`, chmodErr);
+        sudoPromptDetected = true;
+        return;
+      }
     }
     
     // Check if sudoers file exists (using sudo to avoid permission issues)

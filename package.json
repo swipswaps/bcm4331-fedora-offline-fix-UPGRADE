@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "PROJECT_ROOT=$(pwd) tsx server.ts",
-    "setup": "chmod +x setup-system.sh && PROJECT_ROOT=$(pwd) ./setup-system.sh",
+    "setup": "chmod +x setup-system.sh fix-wifi.sh && PROJECT_ROOT=$(pwd) ./setup-system.sh",
     "postinstall": "npm run setup || true",
     "build": "vite build",
     "preview": "vite preview",
