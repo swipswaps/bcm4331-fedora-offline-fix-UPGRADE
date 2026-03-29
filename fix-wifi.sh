@@ -113,6 +113,15 @@ perform_recovery() {
     nmcli networking on 2>/dev/null || true
     nmcli radio all on 2>/dev/null || true
 
+    # 1b. Quarantine Ethernet (Prevents 'Local Choice' deauth due to flapping tg3)
+    local ETH_IFACE
+    ETH_IFACE=$(ls /sys/class/net 2>/dev/null | grep -E '^en|^eth' | head -n1 || echo "")
+    if [[ -n "$ETH_IFACE" ]]; then
+        echo "→ Quarantining Ethernet ($ETH_IFACE) to stabilize Wi-Fi..."
+        nmcli device set "$ETH_IFACE" managed no 2>/dev/null || true
+        ip link set "$ETH_IFACE" down 2>/dev/null || true
+    fi
+
     # 2. Ensure NetworkManager is running
     systemctl is-active --quiet NetworkManager || systemctl start NetworkManager
 
@@ -173,6 +182,10 @@ perform_recovery() {
     # 7. Final verification loop
     for i in {1..10}; do
         if system_is_healthy; then
+            # Restore Ethernet management after Wi-Fi is stable
+            if [[ -n "${ETH_IFACE:-}" ]]; then
+                nmcli device set "$ETH_IFACE" managed yes 2>/dev/null || true
+            fi
             log_milestone "RECOVERY_SUCCESS"
             return 0
         fi
