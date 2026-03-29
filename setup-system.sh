@@ -4,9 +4,9 @@
 # This script installs the recovery helper and configures passwordless sudo.
 
 # REQUIREMENT: All scripts must derive working directory from PROJECT_ROOT
-if [[ -z "$PROJECT_ROOT" ]]; then
-    echo "ERROR: PROJECT_ROOT environment variable must be provided." >&2
-    exit 1
+if [[ -z "${PROJECT_ROOT:-}" ]]; then
+    PROJECT_ROOT=$(pwd)
+    echo "ℹ️  PROJECT_ROOT not set, defaulting to current directory: $PROJECT_ROOT"
 fi
 
 WORKSPACE_DIR="$PROJECT_ROOT"
