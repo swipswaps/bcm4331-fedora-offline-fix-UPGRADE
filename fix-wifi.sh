@@ -79,8 +79,8 @@ fi
 # -------------------------
 # GLOBAL STATE
 # -------------------------
-# REMOVED set -e to prevent silent crashes on non-fatal command failures
-set -uo pipefail 
+# REMOVED set -e and set -o pipefail for maximum resilience
+set -u 
 
 TRACE_PID=""
 CLEANUP_DONE=0
@@ -115,9 +115,17 @@ log_milestone() {
     
     if [[ -f "$TRACE_LOG" ]]; then
         echo "[SYSTEM SNAPSHOT @ $(date)]" >> "$TRACE_LOG"
+        # Heartbeat to prove script is alive
+        echo "HEARTBEAT: Script is active at $(date)" >> "$TRACE_LOG"
         journalctl -n 10 --no-pager -u NetworkManager -t kernel | grep -E "wlp|b43|wl0|NetworkManager|tg3|enp|eth" >> "$TRACE_LOG" 2>/dev/null || true
         echo "------------------------------------" >> "$TRACE_LOG"
     fi
+}
+
+# Helper for debug logging that always goes to the log
+log_debug() {
+    local msg="$1"
+    echo "DEBUG: $msg" | tee -a "$TRACE_LOG"
 }
 
 # -------------------------
@@ -228,17 +236,18 @@ perform_recovery() {
 
     # 6. Deterministic Reconnect (The Critical Fix)
     log_milestone "PROFILE_RECONNECT_START"
-    echo "DEBUG: Starting wifi_rescan..."
+    log_debug "Starting wifi_rescan..."
     wifi_rescan "$IFACE"
-    echo "DEBUG: wifi_rescan finished."
+    log_debug "wifi_rescan finished."
 
     local entries
-    echo "DEBUG: Gathering profiles..."
-    entries="$(get_wifi_profiles_sorted)"
-    echo "DEBUG: Profiles gathered: ${entries:-EMPTY}"
+    log_debug "Gathering profiles..."
+    # Use a simpler command to avoid pipe issues
+    entries=$(nmcli -t -f NAME,TYPE,connection.autoconnect-priority connection show | grep ":wifi:" | sort -t: -k3,3nr | cut -d: -f1,3)
+    log_debug "Profiles gathered: ${entries:-EMPTY}"
     
     if [[ -n "$entries" ]]; then
-        while IFS=: read -r prio conn; do
+        while IFS=: read -r conn prio; do
             [[ -z "$conn" ]] && continue
             if profile_matches_iface "$conn" "$IFACE"; then
                 echo "→ Attempting profile: $conn (prio=$prio)"
