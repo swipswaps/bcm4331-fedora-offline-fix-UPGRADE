@@ -59,15 +59,40 @@ const checkSudoPermissions = async () => {
       sudoPromptDetected = true;
       return;
     }
+
+    // Check if executable
+    try {
+      fs.accessSync(FIX_SCRIPT, fs.constants.X_OK);
+    } catch (err) {
+      console.warn(`⚠️ System integration error: ${FIX_SCRIPT} is not executable.`);
+      sudoPromptDetected = true;
+      return;
+    }
+    
+    // Check if sudoers file exists (optional, but good for diagnostics)
+    const sudoersFile = "/etc/sudoers.d/broadcom-control";
+    try {
+      if (fs.existsSync(sudoersFile)) {
+        console.log(`ℹ️ Sudoers file ${sudoersFile} found.`);
+      } else {
+        console.warn(`ℹ️ Sudoers file ${sudoersFile} missing.`);
+      }
+    } catch (err) {
+      // Directory might be restricted, which is fine
+      console.log(`ℹ️ Sudoers file check skipped (restricted directory).`);
+    }
+
     // -n means non-interactive (fail if password required)
-    await execAsync(`sudo -n "${FIX_SCRIPT}" --workspace "${WORKSPACE_DIR}" --check-only`, 2000);
+    // We use a short timeout and capture output for diagnostics
+    const { stdout, stderr } = await execAsync(`sudo -n "${FIX_SCRIPT}" --workspace "${WORKSPACE_DIR}" --check-only`, 3000);
     sudoPromptDetected = false;
     console.log("✅ System integration verified: Passwordless sudo active.");
   } catch (e: any) {
     sudoPromptDetected = true;
     console.warn("ℹ️ System integration pending: Sudo requires password or script missing.");
-    console.log(`   Diagnostic: ${e.message}`);
-    console.log("   This is normal if you haven't run 'bash setup-system.sh' yet.");
+    console.log(`   Diagnostic Error: ${e.message}`);
+    if (e.stderr) console.log(`   Sudo Stderr: ${e.stderr}`);
+    console.log("   This is normal if you haven't run 'npm run setup' yet or if your sudoers policy is strict.");
   }
 };
 
