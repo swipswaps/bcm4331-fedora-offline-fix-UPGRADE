@@ -24,15 +24,24 @@ sudo chmod +x "$FIX_SCRIPT_DEST"
 
 # 3. Configure Sudoers
 echo "🛡️ Configuring passwordless sudo for $USERNAME..."
-# We add !requiretty because Fedora often requires a TTY for sudo, which breaks background execution
-# We also allow any arguments for the fix-wifi script
+# Fedora specific: ensure the directory exists and has correct permissions
+sudo mkdir -p /etc/sudoers.d
+sudo chmod 750 /etc/sudoers.d
+
+# Create the rule
+# We use a more permissive format for the command to avoid path/arg issues
 {
     echo "Defaults:$USERNAME !requiretty"
     echo "Defaults!$FIX_SCRIPT_DEST !requiretty"
     echo "$USERNAME ALL=(ALL) NOPASSWD: $FIX_SCRIPT_DEST"
 } | sudo tee "$SUDOERS_FILE" > /dev/null
-sudo chmod 440 "$SUDOERS_FILE"
-ls -l "$SUDOERS_FILE"
+
+# Set strict permissions required by sudo
+sudo chmod 0440 "$SUDOERS_FILE"
+sudo chown root:root "$SUDOERS_FILE"
+
+# Verify with sudo to avoid the "Permission denied" error
+sudo ls -l "$SUDOERS_FILE"
 
 # Validate sudoers syntax
 if ! sudo visudo -c -f "$SUDOERS_FILE" &> /dev/null; then

@@ -69,17 +69,21 @@ const checkSudoPermissions = async () => {
       return;
     }
     
-    // Check if sudoers file exists (optional, but good for diagnostics)
+    // Check if sudoers file exists (using sudo to avoid permission issues)
     const sudoersFile = "/etc/sudoers.d/broadcom-control";
     try {
-      if (fs.existsSync(sudoersFile)) {
-        console.log(`ℹ️ Sudoers file ${sudoersFile} found.`);
-      } else {
-        console.warn(`ℹ️ Sudoers file ${sudoersFile} missing.`);
-      }
+      await execAsync(`sudo -n ls "${sudoersFile}"`, 1000);
+      console.log(`ℹ️ Sudoers file ${sudoersFile} found.`);
     } catch (err) {
-      // Directory might be restricted, which is fine
-      console.log(`ℹ️ Sudoers file check skipped (restricted directory).`);
+      console.warn(`ℹ️ Sudoers file ${sudoersFile} missing or inaccessible.`);
+    }
+
+    // Diagnostic: Check if any sudo works without password
+    try {
+      await execAsync("sudo -n true", 1000);
+      console.log("ℹ️ Basic passwordless sudo is functional.");
+    } catch (err) {
+      console.warn("⚠️ Basic passwordless sudo failed. This indicates a global policy issue.");
     }
 
     // -n means non-interactive (fail if password required)
