@@ -385,13 +385,16 @@ app.post("/api/clear-logs", (req, res) => {
 });
 
 async function startServer() {
-  // SELF-HEALING: Clear port 3000 before starting to prevent EADDRINUSE
+  // SELF-HEALING: Aggressively clear ports 3000 and 24678 before starting
   try {
-    console.log("🧹 Self-healing: Clearing port 3000...");
-    await execAsync("fuser -k 3000/tcp || true");
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    console.log("🧹 Self-healing: Aggressively clearing ports 3000 and 24678...");
+    // Kill processes on port 3000 (Express) and 24678 (Vite HMR)
+    await execAsync("sudo fuser -k -9 3000/tcp || true");
+    await execAsync("sudo fuser -k -9 24678/tcp || true");
+    // Wait for OS to release ports
+    await new Promise(resolve => setTimeout(resolve, 2000));
   } catch (e) {
-    console.warn("⚠️ Could not clear port 3000, attempting to bind anyway...");
+    console.warn("⚠️ Could not clear ports, attempting to bind anyway...");
   }
 
   if (process.env.NODE_ENV !== "production") {

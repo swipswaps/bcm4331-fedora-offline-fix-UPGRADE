@@ -228,10 +228,15 @@ perform_recovery() {
 
     # 6. Deterministic Reconnect (The Critical Fix)
     log_milestone "PROFILE_RECONNECT_START"
+    echo "DEBUG: Starting wifi_rescan..."
     wifi_rescan "$IFACE"
+    echo "DEBUG: wifi_rescan finished."
 
     local entries
+    echo "DEBUG: Gathering profiles..."
     entries="$(get_wifi_profiles_sorted)"
+    echo "DEBUG: Profiles gathered: ${entries:-EMPTY}"
+    
     if [[ -n "$entries" ]]; then
         while IFS=: read -r prio conn; do
             [[ -z "$conn" ]] && continue
