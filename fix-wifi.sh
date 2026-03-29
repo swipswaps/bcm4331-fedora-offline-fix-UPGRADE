@@ -79,10 +79,10 @@ fi
 # -------------------------
 # GLOBAL STATE
 # -------------------------
-# NUCLEAR RESILIENCE: Explicitly disable all exit-on-error behaviors
+# NUCLEAR RESILIENCE: Explicitly disable all exit-on-error and unbound-variable behaviors
 set +e
 set +o pipefail
-set -u 
+set +u 
 
 TRACE_PID=""
 CLEANUP_DONE=0
@@ -97,16 +97,17 @@ run_verbatim() {
     local cmd="$*"
     # REQUIREMENT: Print absolute path of log as first line (already done in lock_paths)
     # REQUIREMENT: tee display verbatim all relevant normally hidden messages
-    echo "→ EXECUTING: $cmd" | tee -a "$TRACE_LOG"
+    echo "→ EXECUTING: $cmd" | tee -a "$TRACE_LOG" 2>/dev/null || echo "→ EXECUTING: $cmd"
     # Execute and capture both stdout and stderr, teeing to log and terminal
     # Use eval to handle quotes in commands correctly
-    eval "$cmd" 2>&1 | tee -a "$TRACE_LOG"
+    eval "$cmd" 2>&1 | tee -a "$TRACE_LOG" 2>/dev/null || eval "$cmd"
     local exit_code=${PIPESTATUS[0]}
     if [[ $exit_code -ne 0 ]]; then
-        echo "  ❌ COMMAND FAILED (exit $exit_code)" | tee -a "$TRACE_LOG"
+        echo "  ❌ COMMAND FAILED (exit $exit_code)" | tee -a "$TRACE_LOG" 2>/dev/null || true
     else
-        echo "  ✅ COMMAND SUCCESS" | tee -a "$TRACE_LOG"
+        echo "  ✅ COMMAND SUCCESS" | tee -a "$TRACE_LOG" 2>/dev/null || true
     fi
+    sync 2>/dev/null || true
     return $exit_code
 }
 
@@ -128,7 +129,9 @@ log_milestone() {
 # Helper for debug logging that always goes to the log
 log_debug() {
     local msg="$1"
-    echo "DEBUG: $msg" | tee -a "$TRACE_LOG" || true
+    # Print to console for real-time tracking during debugging
+    echo "DEBUG: $msg" | tee -a "$TRACE_LOG" 2>/dev/null || echo "DEBUG: $msg"
+    sync 2>/dev/null || true
 }
 
 # -------------------------
@@ -139,6 +142,7 @@ cleanup() {
     CLEANUP_DONE=1
     log_milestone "CLEANUP_START"
     [[ -n "${TRACE_PID:-}" ]] && { kill "$TRACE_PID" 2>/dev/null || true; wait "$TRACE_PID" 2>/dev/null || true; }
+    sync 2>/dev/null || true
     log_milestone "CLEANUP_END"
 }
 trap cleanup EXIT INT TERM
@@ -185,6 +189,8 @@ profile_matches_iface() {
 # RECOVERY ACTIONS
 # -------------------------
 perform_recovery() {
+    # NUCLEAR: Enable xtrace for this function to see every single command
+    set -x
     log_milestone "RECOVERY_EXECUTION_START"
 
     # 1. Force Networking ON
