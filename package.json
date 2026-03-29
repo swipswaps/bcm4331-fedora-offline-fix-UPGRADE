@@ -4,8 +4,8 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "tsx server.ts",
-    "setup": "chmod +x setup-system.sh && ./setup-system.sh",
+    "dev": "PROJECT_ROOT=$(pwd) tsx server.ts",
+    "setup": "chmod +x setup-system.sh && PROJECT_ROOT=$(pwd) ./setup-system.sh",
     "postinstall": "npm run setup || true",
     "build": "vite build",
     "preview": "vite preview",

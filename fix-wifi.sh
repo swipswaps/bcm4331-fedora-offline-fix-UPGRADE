@@ -8,13 +8,15 @@ set -euo pipefail
 # -------------------------
 # ROOT ESCALATION
 # -------------------------
-if [[ $EUID -ne 0 ]]; then exec sudo "$0" "$@"; fi
+# REQUIREMENT: Explicitly pass PROJECT_ROOT through sudo to prevent environment stripping
+if [[ $EUID -ne 0 ]]; then 
+    exec sudo PROJECT_ROOT="${PROJECT_ROOT:-}" "$0" "$@"
+fi
 
 # -------------------------
 # SAFE PATH RESOLUTION
 # -------------------------
-# We default to empty to force explicit provision when in system paths
-WORKSPACE_DIR="${FIX_WIFI_WORKSPACE:-}"
+WORKSPACE_DIR=""
 TRACE_LOG=""
 MANIFEST_DB=""
 BUNDLE_DIR=""
@@ -23,18 +25,47 @@ DISABLE_FLAG=""
 # Helper to lock paths once workspace is known
 lock_paths() {
     local ws="$1"
-    WORKSPACE_DIR="$(cd "$ws" && pwd)"
+    # REQUIREMENT: Do not allow 'silent' path resolution. 
+    if [[ -z "$ws" ]]; then
+        echo "ERROR: No workspace provided (via PROJECT_ROOT or --workspace)." >&2
+        exit 1
+    fi
+    if [[ "$ws" != /* ]]; then
+        echo "ERROR: Workspace path must be absolute. Got: $ws" >&2
+        exit 1
+    fi
+    WORKSPACE_DIR="$ws"
     TRACE_LOG="$WORKSPACE_DIR/verbatim_handshake.log"
     MANIFEST_DB="$WORKSPACE_DIR/manifest.db"
     BUNDLE_DIR="$WORKSPACE_DIR/offline_bundle"
     DISABLE_FLAG="$WORKSPACE_DIR/.fix-wifi.disabled"
     
     # REQUIREMENT: First line of output must be the log path
+    # We only print this once we are sure we are in the final root process
     echo "LOG_PATH: $TRACE_LOG"
 }
 
-# If WORKSPACE_DIR was provided via ENV, lock it now
-[[ -n "$WORKSPACE_DIR" ]] && lock_paths "$WORKSPACE_DIR"
+# -------------------------
+# ARGUMENT PARSING (EARLY)
+# -------------------------
+# We parse arguments BEFORE the mandatory check to allow --workspace to satisfy the requirement
+TEMP_WORKSPACE="${PROJECT_ROOT:-}"
+FORCE_RUN=0
+CHECK_ONLY=0
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --workspace) TEMP_WORKSPACE="$2"; shift 2 ;;
+        --force) FORCE_RUN=1; shift ;;
+        --check-only) CHECK_ONLY=1; shift ;;
+        *) shift ;;
+    esac
+done
+
+# REQUIREMENT: Fail if no workspace can be determined
+lock_paths "$TEMP_WORKSPACE"
+
+if [[ "$CHECK_ONLY" -eq 1 ]]; then exit 0; fi
 
 # -------------------------
 # USER INTENT CHECK
@@ -54,12 +85,30 @@ CMD_TIMEOUT_SHORT=1
 CMD_TIMEOUT_LONG=2
 
 # -------------------------
-# LOGGING
+# VERBATIM LOGGING
 # -------------------------
+# Helper to run commands and tee output verbatim
+run_verbatim() {
+    local cmd="$*"
+    # REQUIREMENT: Print absolute path of log as first line (already done in lock_paths)
+    # REQUIREMENT: tee display verbatim all relevant normally hidden messages
+    echo "→ EXECUTING: $cmd" | tee -a "$TRACE_LOG"
+    # Execute and capture both stdout and stderr, teeing to log and terminal
+    # Use eval to handle quotes in commands correctly
+    eval "$cmd" 2>&1 | tee -a "$TRACE_LOG"
+    local exit_code=${PIPESTATUS[0]}
+    if [[ $exit_code -ne 0 ]]; then
+        echo "  ❌ COMMAND FAILED (exit $exit_code)" | tee -a "$TRACE_LOG"
+    else
+        echo "  ✅ COMMAND SUCCESS" | tee -a "$TRACE_LOG"
+    fi
+    return $exit_code
+}
+
 log_milestone() {
     local msg="$1"
-    echo "→ MILESTONE: $msg"
-    echo "→ MILESTONE: $msg" >> "$TRACE_LOG"
+    # REQUIREMENT: tee display verbatim milestones to terminal and log
+    echo "→ MILESTONE: $msg" | tee -a "$TRACE_LOG"
     
     if [[ -f "$TRACE_LOG" ]]; then
         echo "[SYSTEM SNAPSHOT @ $(date)]" >> "$TRACE_LOG"
@@ -98,8 +147,8 @@ system_is_healthy() {
 # -------------------------
 wifi_rescan() {
     local iface="$1"
-    ip link set "$iface" up 2>/dev/null || true
-    nmcli dev wifi rescan ifname "$iface" 2>/dev/null || true
+    run_verbatim "ip link set $iface up"
+    run_verbatim "nmcli dev wifi rescan ifname $iface"
     sleep 1
 }
 
@@ -126,9 +175,9 @@ perform_recovery() {
 
     # 1. Force Networking ON (Fixes "Enable Networking" unchecked)
     echo "→ Restoring global networking states..."
-    rfkill unblock all 2>/dev/null || true
-    nmcli networking on 2>/dev/null || true
-    nmcli radio all on 2>/dev/null || true
+    run_verbatim "rfkill unblock all"
+    run_verbatim "nmcli networking on"
+    run_verbatim "nmcli radio all on"
 
     # 1b. Quarantine Ethernet (Prevents 'Local Choice' deauth due to flapping tg3)
     local ETH_IFACE
@@ -136,21 +185,21 @@ perform_recovery() {
     if [[ -n "$ETH_IFACE" ]]; then
         log_milestone "QUARANTINE_ETHERNET_START:$ETH_IFACE"
         echo "→ Quarantining Ethernet ($ETH_IFACE) to stabilize Wi-Fi..."
-        nmcli device set "$ETH_IFACE" managed no 2>/dev/null || true
-        ip link set "$ETH_IFACE" down 2>/dev/null || true
+        run_verbatim "nmcli device set \"$ETH_IFACE\" managed no"
+        run_verbatim "ip link set \"$ETH_IFACE\" down"
         log_milestone "QUARANTINE_ETHERNET_SUCCESS"
     fi
 
     # 2. Ensure NetworkManager is running
-    systemctl is-active --quiet NetworkManager || systemctl start NetworkManager
+    run_verbatim "systemctl start NetworkManager"
 
     # 3. Interface Setup
     local IFACE
     IFACE=$(ls /sys/class/net 2>/dev/null | grep -E '^wl' | head -n1 || echo "")
     if [[ -n "$IFACE" ]]; then
-        nmcli device set "$IFACE" managed yes 2>/dev/null || true
-        ip link set "$IFACE" up 2>/dev/null || true
-        iw dev "$IFACE" set power_save off 2>/dev/null || true
+        run_verbatim "nmcli device set \"$IFACE\" managed yes"
+        run_verbatim "ip link set \"$IFACE\" up"
+        run_verbatim "iw dev \"$IFACE\" set power_save off"
         log_milestone "INTERFACE_MANAGED_AND_UP"
     else
         log_milestone "NO_WIFI_INTERFACE_FOUND"
@@ -185,9 +234,11 @@ perform_recovery() {
             [[ -z "$conn" ]] && continue
             if profile_matches_iface "$conn" "$IFACE"; then
                 echo "→ Attempting profile: $conn (prio=$prio)"
-                nmcli connection down "$conn" 2>/dev/null || true
+                log_milestone "NM_CONNECT_ATTEMPT:$conn"
+                run_verbatim "nmcli connection down \"$conn\""
                 sleep 0.5
-                if nmcli connection up "$conn" ifname "$IFACE" 2>/dev/null; then
+                # Added timeout to prevent hanging, with verbatim output
+                if timeout 15 run_verbatim "nmcli connection up \"$conn\" ifname \"$IFACE\""; then
                     log_milestone "NM_PROFILE_CONNECT_SUCCESS:$conn"
                     break
                 fi
@@ -219,43 +270,7 @@ perform_recovery() {
 # MAIN
 # -------------------------
 main() {
-    local force_run=0
-    
-    # Argument Parsing
-    while [[ $# -gt 0 ]]; do
-        case $1 in
-            --workspace) 
-                lock_paths "$2"
-                shift 2 ;;
-            --check-only) exit 0 ;;
-            --force) 
-                force_run=1
-                shift ;;
-            --power-save-on) 
-                IFACE=$(ls /sys/class/net | grep -E '^wl' | head -n1 || true)
-                [[ -n "$IFACE" ]] && iw dev "$IFACE" set power_save on 2>/dev/null
-                exit 0 ;;
-            --power-save-off)
-                IFACE=$(ls /sys/class/net | grep -E '^wl' | head -n1 || true)
-                [[ -n "$IFACE" ]] && iw dev "$IFACE" set power_save off 2>/dev/null
-                exit 0 ;;
-            *) shift ;;
-        esac
-    done
-
-    # REQUIREMENT: Fail if in system path without explicit workspace
-    if [[ -z "$WORKSPACE_DIR" ]]; then
-        local script_dir
-        script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-        if [[ "$script_dir" == "/usr/local/bin" ]]; then
-            echo "ERROR: FIX_WIFI_WORKSPACE (PROJECT_ROOT) must be provided when running from system path." >&2
-            exit 1
-        fi
-        # Fallback for local dev only
-        lock_paths "$script_dir"
-    fi
-
-    if [[ "$force_run" -eq 1 ]]; then
+    if [[ "$FORCE_RUN" -eq 1 ]]; then
         # Truncate log on force run to ensure we see fresh data
         echo "=== TRACE START $(date) ===" > "$TRACE_LOG"
     fi
@@ -263,7 +278,7 @@ main() {
     log_milestone "DIAGNOSTIC_START"
     
     # If force is NOT passed, check health and exit if okay
-    if [[ "$force_run" -eq 0 ]]; then
+    if [[ "$FORCE_RUN" -eq 0 ]]; then
         if system_is_healthy; then
             log_milestone "network=connected"
             return 0
@@ -276,5 +291,5 @@ main() {
     perform_recovery
 }
 
-main "$@"
+main
 exit $?

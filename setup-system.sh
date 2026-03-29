@@ -3,7 +3,13 @@
 # Broadcom Recovery Kit - System Setup Script
 # This script installs the recovery helper and configures passwordless sudo.
 
-WORKSPACE_DIR=$(pwd)
+# REQUIREMENT: All scripts must derive working directory from PROJECT_ROOT
+if [[ -z "$PROJECT_ROOT" ]]; then
+    echo "ERROR: PROJECT_ROOT environment variable must be provided." >&2
+    exit 1
+fi
+
+WORKSPACE_DIR="$PROJECT_ROOT"
 FIX_SCRIPT_SRC="$WORKSPACE_DIR/fix-wifi.sh"
 FIX_SCRIPT_DEST="/usr/local/bin/fix-wifi"
 SUDOERS_FILE="/etc/sudoers.d/broadcom-control"

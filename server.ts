@@ -19,9 +19,19 @@ const execAsync = (cmd: string, timeout = 3000) => {
 
 const app = express();
 const PORT = 3000;
-const WORKSPACE_DIR = process.cwd();
+const PROJECT_ROOT = process.env.PROJECT_ROOT;
+if (!PROJECT_ROOT) {
+  console.error("ERROR: PROJECT_ROOT environment variable must be provided.");
+  process.exit(1);
+}
+
+const WORKSPACE_DIR = PROJECT_ROOT;
 const DISABLE_FLAG = path.join(WORKSPACE_DIR, ".fix-wifi.disabled");
 const LOG_FILE = path.join(WORKSPACE_DIR, "verbatim_handshake.log");
+
+// REQUIREMENT: First line of output must be the log path
+console.log(`LOG_PATH: ${LOG_FILE}`);
+
 const FIX_SCRIPT = fs.existsSync("/usr/local/bin/fix-wifi") 
   ? "/usr/local/bin/fix-wifi" 
   : path.join(WORKSPACE_DIR, "fix-wifi.sh");
@@ -285,7 +295,7 @@ app.post("/api/fix", (req, res) => {
   // Call the script directly with sudo, passing the workspace as an argument
   // We also set the environment variable as a fallback
   const child = spawn("sudo", [FIX_SCRIPT, "--workspace", WORKSPACE_DIR, "--force"], {
-    env: { ...process.env, FIX_WIFI_WORKSPACE: WORKSPACE_DIR }
+    env: { ...process.env, PROJECT_ROOT: WORKSPACE_DIR }
   });
 
   child.stdout.on("data", (data) => {
