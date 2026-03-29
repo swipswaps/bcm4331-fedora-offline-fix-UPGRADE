@@ -283,11 +283,18 @@ app.post("/api/fix", (req, res) => {
   console.log(`[${new Date().toLocaleTimeString()}] 🛰️  RECOVERY INITIATED: Running ${FIX_SCRIPT} --force`);
 
   // Call the script directly with sudo, passing the workspace as an argument
-  // This matches the sudoers rule exactly and avoids password prompts
-  const child = spawn("sudo", [FIX_SCRIPT, "--workspace", WORKSPACE_DIR, "--force"]);
+  // We also set the environment variable as a fallback
+  const child = spawn("sudo", [FIX_SCRIPT, "--workspace", WORKSPACE_DIR, "--force"], {
+    env: { ...process.env, FIX_WIFI_WORKSPACE: WORKSPACE_DIR }
+  });
 
   child.stdout.on("data", (data) => {
     const output = data.toString();
+    // REQUIREMENT: Detect and log the confirmed log path
+    if (output.includes("LOG_PATH:")) {
+      const confirmedPath = output.split("LOG_PATH:")[1].trim();
+      console.log(`[HANDSHAKE] Recovery script confirmed log path: ${confirmedPath}`);
+    }
     process.stdout.write(`[FIX STDOUT] ${output}`);
     logBuffer.push(...output.split("\n").filter(l => l.trim()));
     if (logBuffer.length > 500) logBuffer = logBuffer.slice(-500);

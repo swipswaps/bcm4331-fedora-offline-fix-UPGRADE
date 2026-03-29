@@ -13,11 +13,28 @@ if [[ $EUID -ne 0 ]]; then exec sudo "$0" "$@"; fi
 # -------------------------
 # SAFE PATH RESOLUTION
 # -------------------------
-WORKSPACE_DIR="${FIX_WIFI_WORKSPACE:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
-TRACE_LOG="$WORKSPACE_DIR/verbatim_handshake.log"
-MANIFEST_DB="$WORKSPACE_DIR/manifest.db"
-BUNDLE_DIR="$WORKSPACE_DIR/offline_bundle"
-DISABLE_FLAG="$WORKSPACE_DIR/.fix-wifi.disabled"
+# We default to empty to force explicit provision when in system paths
+WORKSPACE_DIR="${FIX_WIFI_WORKSPACE:-}"
+TRACE_LOG=""
+MANIFEST_DB=""
+BUNDLE_DIR=""
+DISABLE_FLAG=""
+
+# Helper to lock paths once workspace is known
+lock_paths() {
+    local ws="$1"
+    WORKSPACE_DIR="$(cd "$ws" && pwd)"
+    TRACE_LOG="$WORKSPACE_DIR/verbatim_handshake.log"
+    MANIFEST_DB="$WORKSPACE_DIR/manifest.db"
+    BUNDLE_DIR="$WORKSPACE_DIR/offline_bundle"
+    DISABLE_FLAG="$WORKSPACE_DIR/.fix-wifi.disabled"
+    
+    # REQUIREMENT: First line of output must be the log path
+    echo "LOG_PATH: $TRACE_LOG"
+}
+
+# If WORKSPACE_DIR was provided via ENV, lock it now
+[[ -n "$WORKSPACE_DIR" ]] && lock_paths "$WORKSPACE_DIR"
 
 # -------------------------
 # USER INTENT CHECK
@@ -202,14 +219,17 @@ perform_recovery() {
 # MAIN
 # -------------------------
 main() {
+    local force_run=0
+    
     # Argument Parsing
     while [[ $# -gt 0 ]]; do
         case $1 in
-            --workspace) WORKSPACE_DIR="$2"; shift 2 ;;
+            --workspace) 
+                lock_paths "$2"
+                shift 2 ;;
             --check-only) exit 0 ;;
             --force) 
-                # Truncate log on force run to ensure we see fresh data
-                echo "=== TRACE START $(date) ===" > "$TRACE_LOG"
+                force_run=1
                 shift ;;
             --power-save-on) 
                 IFACE=$(ls /sys/class/net | grep -E '^wl' | head -n1 || true)
@@ -223,13 +243,36 @@ main() {
         esac
     done
 
-    log_milestone "DIAGNOSTIC_START"
-    if system_is_healthy; then
-        log_milestone "network=connected"
-        return 0
+    # REQUIREMENT: Fail if in system path without explicit workspace
+    if [[ -z "$WORKSPACE_DIR" ]]; then
+        local script_dir
+        script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+        if [[ "$script_dir" == "/usr/local/bin" ]]; then
+            echo "ERROR: FIX_WIFI_WORKSPACE (PROJECT_ROOT) must be provided when running from system path." >&2
+            exit 1
+        fi
+        # Fallback for local dev only
+        lock_paths "$script_dir"
     fi
 
-    log_milestone "network=degraded"
+    if [[ "$force_run" -eq 1 ]]; then
+        # Truncate log on force run to ensure we see fresh data
+        echo "=== TRACE START $(date) ===" > "$TRACE_LOG"
+    fi
+
+    log_milestone "DIAGNOSTIC_START"
+    
+    # If force is NOT passed, check health and exit if okay
+    if [[ "$force_run" -eq 0 ]]; then
+        if system_is_healthy; then
+            log_milestone "network=connected"
+            return 0
+        fi
+        log_milestone "network=degraded"
+    else
+        log_milestone "FORCE_RECOVERY_REQUESTED"
+    fi
+
     perform_recovery
 }
 
