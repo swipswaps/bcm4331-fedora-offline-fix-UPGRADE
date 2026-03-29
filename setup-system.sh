@@ -24,7 +24,11 @@ sudo chmod +x "$FIX_SCRIPT_DEST"
 
 # 3. Configure Sudoers
 echo "🛡️ Configuring passwordless sudo for $USERNAME..."
-echo "$USERNAME ALL=(ALL) NOPASSWD: $FIX_SCRIPT_DEST" | sudo tee "$SUDOERS_FILE" > /dev/null
+# We add !requiretty because Fedora often requires a TTY for sudo, which breaks background execution
+{
+    echo "Defaults:$USERNAME !requiretty"
+    echo "$USERNAME ALL=(ALL) NOPASSWD: $FIX_SCRIPT_DEST"
+} | sudo tee "$SUDOERS_FILE" > /dev/null
 sudo chmod 440 "$SUDOERS_FILE"
 
 # 4. Restore SELinux context (Fedora)
