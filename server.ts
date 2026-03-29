@@ -60,7 +60,7 @@ const checkSudoPermissions = async () => {
       return;
     }
     // -n means non-interactive (fail if password required)
-    await execAsync(`sudo -n "${FIX_SCRIPT}" --check-only`, 2000);
+    await execAsync(`sudo -n "${FIX_SCRIPT}" --workspace "${WORKSPACE_DIR}" --check-only`, 2000);
     sudoPromptDetected = false;
     console.log("✅ System integration verified: Passwordless sudo active.");
   } catch (e: any) {
@@ -235,7 +235,8 @@ app.post("/api/toggle-recovery", (req, res) => {
 app.post("/api/toggle-power-save", (req, res) => {
   const { enabled } = req.body;
   const flag = enabled ? "--power-save-on" : "--power-save-off";
-  exec(`sudo FIX_WIFI_WORKSPACE="${WORKSPACE_DIR}" "${FIX_SCRIPT}" ${flag}`, (error, stdout, stderr) => {
+  // Use direct sudo call with --workspace argument
+  exec(`sudo "${FIX_SCRIPT}" --workspace "${WORKSPACE_DIR}" ${flag}`, (error, stdout, stderr) => {
     console.log("Power save toggle completed", { error, stdout, stderr });
   });
   res.json({ success: true, powerSave: enabled ? "on" : "off" });
@@ -252,9 +253,9 @@ app.post("/api/fix", (req, res) => {
   logBuffer.push(`[${new Date().toISOString()}] 🛰️ Recovery sequence initiated...`);
   console.log(`[${new Date().toLocaleTimeString()}] 🛰️  RECOVERY INITIATED: Running ${FIX_SCRIPT} --force`);
 
-  // Use sh -c to ensure environment variables are correctly passed through sudo
-  const command = `FIX_WIFI_WORKSPACE="${WORKSPACE_DIR}" "${FIX_SCRIPT}" --force`;
-  const child = spawn("sudo", ["sh", "-c", command]);
+  // Call the script directly with sudo, passing the workspace as an argument
+  // This matches the sudoers rule exactly and avoids password prompts
+  const child = spawn("sudo", [FIX_SCRIPT, "--workspace", WORKSPACE_DIR, "--force"]);
 
   child.stdout.on("data", (data) => {
     const output = data.toString();

@@ -989,66 +989,51 @@ export default function App() {
                 {/* Sudo Warning */}
                 {status?.sudoPromptDetected && (
                   <motion.div 
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    className="p-3 bg-red-500/20 border border-red-500/30 rounded-lg flex items-start gap-3"
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="p-4 bg-red-500/10 border-2 border-red-500/30 rounded-xl space-y-4 shadow-[0_0_20px_rgba(239,68,68,0.1)]"
                     role="alert"
                   >
-                    <ShieldAlert className="w-4 h-4 text-red-400 mt-0.5" aria-hidden="true" />
-                    <div className="flex-1 space-y-1.5">
-                      <span className="text-[10px] font-bold text-red-200 uppercase tracking-tight">System Integration Required</span>
-                      <p className="text-[9px] text-red-200/70 leading-relaxed">
-                        The recovery script needs passwordless sudo to fix Wi-Fi automatically.
-                      </p>
-                      <div className="flex items-center gap-3">
+                    <div className="flex items-start gap-3">
+                      <ShieldAlert className="w-5 h-5 text-red-400 shrink-0" aria-hidden="true" />
+                      <div className="flex-1 space-y-1">
+                        <span className="text-[10px] font-bold text-red-200 uppercase tracking-tight">System Integration Required</span>
+                        <p className="text-[9px] text-red-200/70 leading-relaxed">
+                          Autonomous recovery requires a one-time system integration to allow passwordless execution.
+                        </p>
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between px-2 py-1.5 bg-black/40 rounded border border-white/10">
+                        <code className="text-[9px] font-mono text-emerald-400 truncate">bash setup-system.sh</code>
                         <button 
-                          onClick={async () => {
-                            try {
-                              await fetch("/api/run-setup", { method: "POST" });
-                              // We don't wait for it to finish because it might hang on sudo prompt
-                              // but we can start polling for status
-                              const interval = setInterval(async () => {
-                                const res = await fetch("/api/status");
-                                const data = await res.json();
-                                if (!data.sudoPromptDetected) {
-                                  clearInterval(interval);
-                                }
-                              }, 2000);
-                            } catch (e) {
-                              console.error("Failed to run setup", e);
-                            }
+                          onClick={() => {
+                            navigator.clipboard.writeText('bash setup-system.sh');
+                            // Optional: add a "Copied!" state here
                           }}
-                          className="px-2 py-1 bg-red-500/30 hover:bg-red-500/50 border border-red-500/40 rounded text-[9px] text-red-100 font-bold uppercase transition-colors"
+                          className="text-[9px] font-bold text-blue-400 hover:text-blue-300 uppercase ml-2 shrink-0"
                         >
-                          Run Setup
-                        </button>
-                        <div className="w-px h-3 bg-red-500/20" />
-                        <div className="flex items-center gap-2">
-                          <code className="px-1.5 py-0.5 bg-black/40 rounded text-[8px] font-mono text-red-300 border border-red-500/20">
-                            bash setup-system.sh
-                          </code>
-                          <button 
-                            onClick={() => navigator.clipboard.writeText('bash setup-system.sh')}
-                            className="text-[8px] text-red-400 hover:text-red-300 uppercase font-bold tracking-tighter"
-                          >
-                            Copy
-                          </button>
-                        </div>
-                        <div className="w-px h-3 bg-red-500/20" />
-                        <button 
-                          onClick={async () => {
-                            try {
-                              await fetch("/api/recheck-sudo", { method: "POST" });
-                              fetchStatus();
-                            } catch (e) {
-                              console.error("Failed to re-check sudo", e);
-                            }
-                          }}
-                          className="text-[8px] text-blue-400 hover:text-blue-300 uppercase font-bold tracking-widest"
-                        >
-                          Re-check
+                          Copy
                         </button>
                       </div>
+                      <p className="text-[8px] text-center opacity-40 uppercase tracking-widest">Run this in your terminal to fix</p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button 
+                        onClick={async () => {
+                          try {
+                            await fetch("/api/recheck-sudo", { method: "POST" });
+                            fetchStatus();
+                          } catch (e) {
+                            console.error("Failed to re-check sudo", e);
+                          }
+                        }}
+                        className="flex-1 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-[9px] font-bold uppercase transition-colors"
+                      >
+                        Re-check Status
+                      </button>
                     </div>
                   </motion.div>
                 )}
@@ -1373,8 +1358,13 @@ export default function App() {
                           {status?.isFixing ? `Fixing... ${fixElapsedTime > 0 ? `(${fixElapsedTime}s)` : ''}` : 'Force Recovery'}
                         </span>
                       </div>
-                      {!status?.isHealthy && !status?.isFixing && (
+                      {!status?.isHealthy && !status?.isFixing && !status?.lastFixError && (
                         <span className="text-[8px] uppercase tracking-[0.2em] opacity-80 animate-pulse">Recommended Action</span>
+                      )}
+                      {status?.lastFixError && !status?.isFixing && (
+                        <span className="text-[8px] uppercase tracking-[0.2em] text-red-400 font-bold">
+                          Last Fix Failed: {status.lastFixError}
+                        </span>
                       )}
                       {status?.isFixing && fixElapsedTime > 15 && (
                         <span className="text-[8px] uppercase tracking-[0.2em] text-amber-500 animate-pulse">Slow Handshake Detected</span>
@@ -1386,16 +1376,46 @@ export default function App() {
                {/* Sudo Warning (Full View) */}
                {status?.sudoPromptDetected && (
                 <motion.div 
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="p-4 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-start gap-3 shrink-0"
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="p-4 rounded-2xl bg-red-500/10 border-2 border-red-500/30 flex flex-col gap-3 shrink-0 shadow-[0_0_20px_rgba(239,68,68,0.1)]"
                 >
-                  <ShieldAlert className="w-5 h-5 text-red-400 shrink-0" />
-                  <div className="space-y-1">
-                    <h4 className="text-[10px] font-bold text-red-200 uppercase tracking-wider">Sudo Password Required</h4>
-                    <p className="text-[9px] text-red-200/60 leading-relaxed">
-                      Recovery paused. Enter password in terminal.
-                    </p>
+                  <div className="flex items-start gap-3">
+                    <ShieldAlert className="w-5 h-5 text-red-400 shrink-0" />
+                    <div className="space-y-1">
+                      <h4 className="text-[10px] font-bold text-red-200 uppercase tracking-wider">Sudo Integration Required</h4>
+                      <p className="text-[9px] text-red-200/60 leading-relaxed">
+                        The recovery script is hanging on a password prompt. Autonomous recovery requires passwordless sudo.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button 
+                      onClick={async () => {
+                        try {
+                          await fetch("/api/run-setup", { method: "POST" });
+                          setTimeout(fetchStatus, 1000);
+                        } catch (e) {
+                          console.error("Failed to run setup", e);
+                        }
+                      }}
+                      className="flex-1 py-2 bg-red-500 text-black text-[9px] font-bold rounded-lg uppercase hover:bg-red-400 transition-colors"
+                    >
+                      Apply Fix Now
+                    </button>
+                    <button 
+                      onClick={async () => {
+                        try {
+                          await fetch("/api/recheck-sudo", { method: "POST" });
+                          fetchStatus();
+                        } catch (e) {
+                          console.error("Failed to re-check sudo", e);
+                        }
+                      }}
+                      className="px-3 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-[9px] font-bold uppercase transition-colors"
+                    >
+                      Re-check
+                    </button>
                   </div>
                 </motion.div>
               )}
