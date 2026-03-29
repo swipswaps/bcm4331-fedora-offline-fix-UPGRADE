@@ -1,17 +1,21 @@
 #!/usr/bin/env bash
 # -----------------------------------------------------------------------------
-# File: fix-wifi.sh (v46 - AUTH-AWARE + DETERMINISTIC RECOVERY + NM-CONSISTENT)
+# File: fix-wifi.sh (v50 - NUCLEAR RESILIENCE + XTRACE + NO-U)
 # -----------------------------------------------------------------------------
 
-set -uo pipefail
+# NUCLEAR: Absolute transparency from the first line
+set -x
 
 # -------------------------
 # ROOT ESCALATION
 # -------------------------
 # REQUIREMENT: Explicitly pass PROJECT_ROOT through sudo to prevent environment stripping
+echo "DEBUG: Checking root status (UID: $UID)"
 if [[ $EUID -ne 0 ]]; then 
+    echo "DEBUG: Not root, escalating via sudo..."
     exec sudo PROJECT_ROOT="${PROJECT_ROOT:-}" "$0" "$@"
 fi
+echo "DEBUG: Running as root"
 
 # -------------------------
 # SAFE PATH RESOLUTION
@@ -25,6 +29,7 @@ DISABLE_FLAG=""
 # Helper to lock paths once workspace is known
 lock_paths() {
     local ws="$1"
+    echo "DEBUG: Entering lock_paths (ws: $ws)" | tee -a "$TRACE_LOG" 2>/dev/null || true
     # REQUIREMENT: Do not allow 'silent' path resolution. 
     if [[ -z "$ws" ]]; then
         echo "ERROR: No workspace provided (via PROJECT_ROOT or --workspace)." >&2
@@ -43,12 +48,14 @@ lock_paths() {
     # REQUIREMENT: First line of output must be the log path
     # We only print this once we are sure we are in the final root process
     echo "LOG_PATH: $TRACE_LOG"
+    echo "DEBUG: Exiting lock_paths (TRACE_LOG: $TRACE_LOG)" | tee -a "$TRACE_LOG" 2>/dev/null || true
 }
 
 # -------------------------
 # ARGUMENT PARSING (EARLY)
 # -------------------------
 # We parse arguments BEFORE the mandatory check to allow --workspace to satisfy the requirement
+echo "DEBUG: Parsing arguments (Args: $*)"
 TEMP_WORKSPACE="${PROJECT_ROOT:-}"
 FORCE_RUN=0
 CHECK_ONLY=0
@@ -63,6 +70,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 # REQUIREMENT: Fail if no workspace can be determined
+echo "DEBUG: Finalizing paths with workspace: $TEMP_WORKSPACE"
 lock_paths "$TEMP_WORKSPACE"
 
 if [[ "$CHECK_ONLY" -eq 1 ]]; then exit 0; fi
@@ -95,6 +103,7 @@ CMD_TIMEOUT_LONG=2
 # Helper to run commands and tee output verbatim
 run_verbatim() {
     local cmd="$*"
+    echo "DEBUG: Entering run_verbatim (cmd: $cmd)" | tee -a "$TRACE_LOG" 2>/dev/null || true
     # REQUIREMENT: Print absolute path of log as first line (already done in lock_paths)
     # REQUIREMENT: tee display verbatim all relevant normally hidden messages
     echo "→ EXECUTING: $cmd" | tee -a "$TRACE_LOG" 2>/dev/null || echo "→ EXECUTING: $cmd"
@@ -108,11 +117,13 @@ run_verbatim() {
         echo "  ✅ COMMAND SUCCESS" | tee -a "$TRACE_LOG" 2>/dev/null || true
     fi
     sync 2>/dev/null || true
+    echo "DEBUG: Exiting run_verbatim" | tee -a "$TRACE_LOG" 2>/dev/null || true
     return $exit_code
 }
 
 log_milestone() {
     local msg="$1"
+    echo "DEBUG: Entering log_milestone (msg: $msg)" | tee -a "$TRACE_LOG" 2>/dev/null || true
     # REQUIREMENT: tee display verbatim milestones to terminal and log
     echo "→ MILESTONE: $msg" | tee -a "$TRACE_LOG" || true
     
@@ -124,22 +135,28 @@ log_milestone() {
             echo "------------------------------------"
         } >> "$TRACE_LOG" 2>/dev/null || true
     fi
+    echo "DEBUG: Exiting log_milestone" | tee -a "$TRACE_LOG" 2>/dev/null || true
 }
 
 # Helper for debug logging that always goes to the log
 log_debug() {
     local msg="$1"
+    echo "DEBUG: Entering log_debug (msg: $msg)" | tee -a "$TRACE_LOG" 2>/dev/null || true
     # Print to console for real-time tracking during debugging
     echo "DEBUG: $msg" | tee -a "$TRACE_LOG" 2>/dev/null || echo "DEBUG: $msg"
     sync 2>/dev/null || true
+    echo "DEBUG: Exiting log_debug" | tee -a "$TRACE_LOG" 2>/dev/null || true
 }
 
 # -------------------------
 # CLEANUP
 # -------------------------
 cleanup() {
+    local exit_code=$?
     if [[ "$CLEANUP_DONE" -eq 1 ]]; then return 0; fi
     CLEANUP_DONE=1
+    # NUCLEAR: Log why we are cleaning up
+    echo "DEBUG: Cleanup triggered (Exit Code: $exit_code)" | tee -a "$TRACE_LOG" 2>/dev/null || true
     log_milestone "CLEANUP_START"
     [[ -n "${TRACE_PID:-}" ]] && { kill "$TRACE_PID" 2>/dev/null || true; wait "$TRACE_PID" 2>/dev/null || true; }
     sync 2>/dev/null || true
@@ -151,13 +168,22 @@ trap cleanup EXIT INT TERM
 # HEALTH CHECK
 # -------------------------
 system_is_healthy() {
+    echo "DEBUG: Entering system_is_healthy" | tee -a "$TRACE_LOG" 2>/dev/null || true
     local net_state
     net_state=$(timeout "$CMD_TIMEOUT_SHORT" nmcli networking connectivity 2>/dev/null || echo "unknown")
-    [[ "$net_state" != "none" ]] || return 1
+    if [[ "$net_state" == "none" ]]; then
+        echo "DEBUG: system_is_healthy returning 1 (connectivity: none)" | tee -a "$TRACE_LOG" 2>/dev/null || true
+        return 1
+    fi
 
     local status
     status="$(timeout "$CMD_TIMEOUT_SHORT" nmcli -t -f DEVICE,STATE device 2>/dev/null || true)"
-    echo "$status" | awk -F: '$2 ~ /connected/ && $1 != "lo" {found=1} END{exit !found}'
+    if echo "$status" | awk -F: '$2 ~ /connected/ && $1 != "lo" {found=1} END{exit !found}'; then
+        echo "DEBUG: system_is_healthy returning 0" | tee -a "$TRACE_LOG" 2>/dev/null || true
+        return 0
+    fi
+    echo "DEBUG: system_is_healthy returning 1 (no connected device)" | tee -a "$TRACE_LOG" 2>/dev/null || true
+    return 1
 }
 
 # -------------------------
@@ -165,32 +191,43 @@ system_is_healthy() {
 # -------------------------
 wifi_rescan() {
     local iface="$1"
+    echo "DEBUG: Entering wifi_rescan (iface: $iface)" | tee -a "$TRACE_LOG" 2>/dev/null || true
     run_verbatim "ip link set $iface up"
     run_verbatim "nmcli dev wifi rescan ifname $iface"
     sleep 1
+    echo "DEBUG: Exiting wifi_rescan" | tee -a "$TRACE_LOG" 2>/dev/null || true
 }
 
 get_wifi_profiles_sorted() {
+    echo "DEBUG: Entering get_wifi_profiles_sorted" | tee -a "$TRACE_LOG" 2>/dev/null || true
     # Returns priority:name
-    nmcli -t -f NAME,TYPE,connection.autoconnect-priority connection show 2>/dev/null \
+    local res
+    res=$(nmcli -t -f NAME,TYPE,connection.autoconnect-priority connection show 2>/dev/null \
         | awk -F: '$2=="wifi" {prio=$3; if(prio=="") prio=0; print prio ":" $1}' \
-        | sort -t: -k1,1nr
+        | sort -t: -k1,1nr)
+    echo "DEBUG: get_wifi_profiles_sorted returning: $res" | tee -a "$TRACE_LOG" 2>/dev/null || true
+    echo "$res"
 }
 
 profile_matches_iface() {
     local conn="$1"
     local iface="$2"
+    echo "DEBUG: Entering profile_matches_iface (conn: $conn, iface: $iface)" | tee -a "$TRACE_LOG" 2>/dev/null || true
     local bound_iface
     bound_iface=$(nmcli -g connection.interface-name connection show "$conn" 2>/dev/null || true)
-    [[ -z "$bound_iface" ]] || [[ "$bound_iface" == "$iface" ]]
+    if [[ -z "$bound_iface" ]] || [[ "$bound_iface" == "$iface" ]]; then
+        echo "DEBUG: profile_matches_iface returning 0" | tee -a "$TRACE_LOG" 2>/dev/null || true
+        return 0
+    fi
+    echo "DEBUG: profile_matches_iface returning 1" | tee -a "$TRACE_LOG" 2>/dev/null || true
+    return 1
 }
 
 # -------------------------
 # RECOVERY ACTIONS
 # -------------------------
 perform_recovery() {
-    # NUCLEAR: Enable xtrace for this function to see every single command
-    set -x
+    echo "DEBUG: Entering perform_recovery" | tee -a "$TRACE_LOG" 2>/dev/null || true
     log_milestone "RECOVERY_EXECUTION_START"
 
     # 1. Force Networking ON
@@ -285,12 +322,14 @@ perform_recovery() {
             # manually re-enables it or reboots, to prevent flapping from killing the link again.
             echo "→ Wi-Fi stable. Ethernet ($ETH_IFACE) remains quarantined for stability."
             log_milestone "ETHERNET_REMAINS_QUARANTINED"
+            echo "DEBUG: Exiting perform_recovery (SUCCESS)" | tee -a "$TRACE_LOG" 2>/dev/null || true
             return 0
         fi
         sleep 1
     done
 
     log_milestone "RECOVERY_FAILED"
+    echo "DEBUG: Exiting perform_recovery (FAILED)" | tee -a "$TRACE_LOG" 2>/dev/null || true
     return 1
 }
 
@@ -298,10 +337,12 @@ perform_recovery() {
 # MAIN
 # -------------------------
 main() {
+    echo "DEBUG: Starting main (Shell: $BASH_VERSION)" | tee -a "$TRACE_LOG" 2>/dev/null || true
     if [[ "$FORCE_RUN" -eq 1 ]]; then
         # Truncate log on force run to ensure we see fresh data
         echo "=== TRACE START $(date) ===" > "$TRACE_LOG"
     fi
+    echo "DEBUG: TRACE_LOG is $TRACE_LOG" | tee -a "$TRACE_LOG" 2>/dev/null || true
 
     log_milestone "DIAGNOSTIC_START"
     
@@ -316,8 +357,16 @@ main() {
         log_milestone "FORCE_RECOVERY_REQUESTED"
     fi
 
+    echo "DEBUG: Calling perform_recovery" | tee -a "$TRACE_LOG" 2>/dev/null || true
     perform_recovery
+    local res=$?
+    echo "DEBUG: perform_recovery returned $res" | tee -a "$TRACE_LOG" 2>/dev/null || true
+    return $res
 }
 
+# -------------------------
+# EXECUTION
+# -------------------------
+echo "DEBUG: Calling main" | tee -a "$TRACE_LOG" 2>/dev/null || true
 main
 exit $?
