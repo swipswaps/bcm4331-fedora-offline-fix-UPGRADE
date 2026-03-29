@@ -1313,6 +1313,30 @@ function AppContent() {
     );
   }
 
+  if (!status) {
+    return (
+      <div className="min-h-screen bg-[#0A0A0A] text-white flex flex-col items-center justify-center p-6 font-mono">
+        <div className="w-full max-w-md p-8 rounded-3xl bg-amber-500/10 border border-amber-500/20 space-y-6 text-center">
+          <div className="w-16 h-16 bg-amber-500/20 rounded-full flex items-center justify-center mx-auto">
+            <WifiOff className="w-8 h-8 text-amber-500" />
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-xl font-bold uppercase tracking-tighter">Telemetry Offline</h2>
+            <p className="text-xs text-white/60 leading-relaxed">
+              The dashboard is unable to establish a handshake with the Broadcom recovery service.
+            </p>
+          </div>
+          <button 
+            onClick={() => fetchStatus()}
+            className="w-full py-3 bg-amber-500 text-black rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-amber-600 transition-all"
+          >
+            Retry Connection
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#0A0A0A] text-[#E0E0E0] font-sans select-text flex flex-col p-6">
       {isCompact ? (
