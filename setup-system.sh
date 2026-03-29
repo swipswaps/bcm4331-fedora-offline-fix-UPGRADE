@@ -17,6 +17,10 @@ USERNAME=$(whoami)
 
 echo "🛰️ Starting Broadcom Recovery Kit System Integration..."
 
+# REQUIREMENT: Ensure forensic dependencies are present
+echo "📦 Installing forensic dependencies (sqlite, tcpdump, mtr, traceroute, bind-utils)..."
+sudo dnf install -y sqlite tcpdump mtr traceroute bind-utils NetworkManager iw || true
+
 # 1. Check if script exists
 if [[ ! -f "$FIX_SCRIPT_SRC" ]]; then
     echo "❌ Error: fix-wifi.sh not found in current directory."
