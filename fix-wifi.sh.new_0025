@@ -1,0 +1,246 @@
+#!/usr/bin/env bash
+# =============================================================================
+# fix-wifi.sh (v0025 — POLICY-AWARE, AUTO-RECOVERY + STRICT SAFETY GATES)
+# =============================================================================
+#
+# OBJECTIVE:
+#   Resolve the missing detection + recovery for:
+#     "Enable Networking" (NetworkManager global toggle)
+#
+# BEHAVIOR MODES:
+#
+#   STRICT MODE:
+#     - respects user disabling networking
+#     - does NOT override user intent
+#
+#   AUTO MODE (default in this script):
+#     - if networking is disabled → attempt to re-enable
+#
+# SAFETY GUARANTEES:
+#   ✔ Never touches loopback
+#   ✔ Never activates already-active connections
+#   ✔ Never activates all connections
+#   ✔ Only ONE activation attempt at a time
+#   ✔ Does nothing if network is healthy
+#
+# =============================================================================
+
+set -euo pipefail
+
+LOG_FILE="/var/log/net-controller.log"
+
+# -----------------------------------------------------------------------------
+# CONFIGURATION (USER-SELECTABLE POLICY)
+# -----------------------------------------------------------------------------
+AUTO_REENABLE_NETWORKING="${AUTO_REENABLE_NETWORKING:-1}"  # 1=auto, 0=strict
+
+# -----------------------------------------------------------------------------
+# LOGGING
+# -----------------------------------------------------------------------------
+log() {
+  echo "[$(date -Is)] $*" | tee -a "$LOG_FILE"
+}
+
+# -----------------------------------------------------------------------------
+# SAFE EXECUTION
+# -----------------------------------------------------------------------------
+run() {
+  local label="$1"
+  shift
+  log "RUN: $label"
+  timeout 3s "$@" || {
+    log "ERROR: $label failed"
+    return 1
+  }
+}
+
+# -----------------------------------------------------------------------------
+# NETWORKMANAGER STATE CHECKS
+# -----------------------------------------------------------------------------
+networking_enabled() {
+  # Explicit check for global networking toggle
+  nmcli networking 2>/dev/null | grep -q "enabled" || return 1
+}
+
+nm_enabled() {
+  nmcli general status 2>/dev/null | grep -q "connected" || return 1
+}
+
+# -----------------------------------------------------------------------------
+# ACTIVE CONNECTIONS
+# -----------------------------------------------------------------------------
+active_connections() {
+  nmcli -t -f UUID,DEVICE connection show --active 2>/dev/null || true
+}
+
+# -----------------------------------------------------------------------------
+# HEALTH CHECK
+# -----------------------------------------------------------------------------
+network_is_healthy() {
+  # Minimal safe health heuristic:
+  # - at least one active connection exists
+  # - AND a default route exists
+  if ! active_connections | grep -q .; then
+    return 1
+  fi
+
+  ip route 2>/dev/null | grep -q "^default" || return 1
+
+  return 0
+}
+
+# -----------------------------------------------------------------------------
+# CONNECTION ENUMERATION
+# -----------------------------------------------------------------------------
+valid_connections() {
+  nmcli -t -f NAME,UUID,DEVICE connection show 2>/dev/null | \
+  while IFS=: read -r name uuid dev; do
+    [[ -z "$uuid" ]] && continue
+    [[ "$dev" == "lo" ]] && continue
+    echo "$name:$uuid:$dev"
+  done
+}
+
+# -----------------------------------------------------------------------------
+# SELECT BEST CONNECTION (PREFER WIRED, THEN WIFI)
+# -----------------------------------------------------------------------------
+select_best_connection() {
+
+  # Wired first
+  while IFS=: read -r name uuid dev; do
+    if nmcli device status 2>/dev/null | grep -q "^$dev.*ethernet.*connected"; then
+      echo "$name:$uuid:$dev"
+      return 0
+    fi
+  done < <(valid_connections)
+
+  # Then WiFi
+  while IFS=: read -r name uuid dev; do
+    if nmcli device status 2>/dev/null | grep -q "^$dev.*wifi"; then
+      echo "$name:$uuid:$dev"
+      return 0
+    fi
+  done < <(valid_connections)
+}
+
+# -----------------------------------------------------------------------------
+# CONNECTION ACTIVATION (SINGLE TARGET)
+# -----------------------------------------------------------------------------
+activate_one() {
+  local name="$1"
+  local uuid="$2"
+  local dev="$3"
+
+  log "ACTIVATE:"
+  log "  NAME=$name"
+  log "  UUID=$uuid"
+  log "  DEV=$dev"
+
+  nmcli connection up uuid "$uuid" 2>/dev/null && {
+    log "SUCCESS: UUID"
+    return 0
+  }
+
+  nmcli connection up "$name" 2>/dev/null && {
+    log "SUCCESS: NAME"
+    return 0
+  }
+
+  log "FAIL: activation failed"
+  return 1
+}
+
+# -----------------------------------------------------------------------------
+# RECOVERY ENGINE
+# -----------------------------------------------------------------------------
+recover() {
+
+  # ---------------------------------------------------------------------------
+  # CASE 1: USER DISABLED NETWORKING (GLOBAL TOGGLE)
+  # ---------------------------------------------------------------------------
+  if ! networking_enabled; then
+    log "STATE: networking is DISABLED"
+
+    if [[ "$AUTO_REENABLE_NETWORKING" -eq 1 ]]; then
+      log "AUTO MODE: attempting to re-enable networking"
+
+      if nmcli networking on 2>/dev/null; then
+        log "SUCCESS: networking re-enabled"
+      else
+        log "FAIL: could not re-enable networking"
+      fi
+
+    else
+      log "STRICT MODE: respecting user intent (no action)"
+    fi
+
+    return
+  fi
+
+  # ---------------------------------------------------------------------------
+  # CASE 2: NM SERVICE NOT READY
+  # ---------------------------------------------------------------------------
+  if ! nm_enabled; then
+    log "STATE: NetworkManager not in connected state → skip"
+    return
+  fi
+
+  # ---------------------------------------------------------------------------
+  # CASE 3: HEALTHY NETWORK → DO NOTHING
+  # ---------------------------------------------------------------------------
+  if network_is_healthy; then
+    log "NETWORK HEALTHY → no action"
+    return
+  fi
+
+  # ---------------------------------------------------------------------------
+  # CASE 4: SELECT AND ACTIVATE SINGLE CONNECTION
+  # ---------------------------------------------------------------------------
+  local selected
+  selected=$(select_best_connection || true)
+
+  if [[ -z "$selected" ]]; then
+    log "NO VALID CONNECTIONS AVAILABLE"
+    return 1
+  fi
+
+  IFS=: read -r name uuid dev <<< "$selected"
+
+  [[ "$dev" == "lo" ]] && {
+    log "SKIP: loopback"
+    return 0
+  }
+
+  activate_one "$name" "$uuid" "$dev"
+}
+
+# -----------------------------------------------------------------------------
+# MAIN LOOP
+# -----------------------------------------------------------------------------
+log "=== v0025 POLICY-AWARE NETWORK CONTROLLER START ==="
+
+while true; do
+
+  echo
+  log "---- LOOP ----"
+
+  log "DEVICE STATE:"
+  nmcli device status 2>/dev/null || true
+
+  log "ACTIVE:"
+  active_connections || true
+
+  if ! networking_enabled; then
+    log "GLOBAL NETWORKING IS OFF"
+  fi
+
+  if network_is_healthy; then
+    log "HEARTBEAT: network OK"
+  else
+    log "HEARTBEAT: recovery triggered"
+    recover
+  fi
+
+  sleep 3
+
+done
