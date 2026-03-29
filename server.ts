@@ -379,6 +379,15 @@ app.post("/api/clear-logs", (req, res) => {
 });
 
 async function startServer() {
+  // SELF-HEALING: Clear port 3000 before starting to prevent EADDRINUSE
+  try {
+    console.log("🧹 Self-healing: Clearing port 3000...");
+    await execAsync("fuser -k 3000/tcp || true");
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  } catch (e) {
+    console.warn("⚠️ Could not clear port 3000, attempting to bind anyway...");
+  }
+
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },

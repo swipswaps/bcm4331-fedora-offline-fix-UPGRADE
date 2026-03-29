@@ -173,20 +173,20 @@ profile_matches_iface() {
 perform_recovery() {
     log_milestone "RECOVERY_EXECUTION_START"
 
-    # 1. Force Networking ON (Fixes "Enable Networking" unchecked)
+    # 1. Force Networking ON
     echo "→ Restoring global networking states..."
-    run_verbatim "rfkill unblock all"
-    run_verbatim "nmcli networking on"
-    run_verbatim "nmcli radio all on"
+    run_verbatim "rfkill unblock all" || true
+    run_verbatim "nmcli networking on" || true
+    run_verbatim "nmcli radio all on" || true
 
-    # 1b. Quarantine Ethernet (Prevents 'Local Choice' deauth due to flapping tg3)
+    # 1b. Quarantine Ethernet
     local ETH_IFACE
     ETH_IFACE=$(ls /sys/class/net 2>/dev/null | grep -E '^en|^eth' | head -n1 || echo "")
     if [[ -n "$ETH_IFACE" ]]; then
         log_milestone "QUARANTINE_ETHERNET_START:$ETH_IFACE"
         echo "→ Quarantining Ethernet ($ETH_IFACE) to stabilize Wi-Fi..."
-        run_verbatim "nmcli device set \"$ETH_IFACE\" managed no"
-        run_verbatim "ip link set \"$ETH_IFACE\" down"
+        run_verbatim "nmcli device set \"$ETH_IFACE\" managed no" || true
+        run_verbatim "ip link set \"$ETH_IFACE\" down" || true
         log_milestone "QUARANTINE_ETHERNET_SUCCESS"
     fi
 
@@ -235,7 +235,8 @@ perform_recovery() {
             if profile_matches_iface "$conn" "$IFACE"; then
                 echo "→ Attempting profile: $conn (prio=$prio)"
                 log_milestone "NM_CONNECT_ATTEMPT:$conn"
-                run_verbatim "nmcli connection down \"$conn\""
+                # RESILIENT: Don't let a failed 'down' kill the script
+                run_verbatim "nmcli connection down \"$conn\"" || true
                 sleep 0.5
                 # Added timeout to prevent hanging, with verbatim output
                 if timeout 15 run_verbatim "nmcli connection up \"$conn\" ifname \"$IFACE\""; then
